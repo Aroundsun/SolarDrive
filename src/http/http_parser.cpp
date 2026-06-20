@@ -49,6 +49,12 @@ void HttpParser::reset() {
     state_ = State::kStart;
     complete_ = false;
     body_bytes_remaining_ = 0;
+    method_buf_.clear();
+    path_buf_.clear();
+    query_buf_.clear();
+    version_buf_.clear();
+    cur_header_value_.clear();
+    body_buf_.clear();
     reset_request();
 }
 

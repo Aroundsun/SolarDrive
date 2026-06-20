@@ -44,35 +44,28 @@ std::string FileDao::insert(const FileRecord& f)
     auto guard = pool_.acquire();
     pqxx::work txn(*guard);
 
-    // 如果 id 为空，使用 DEFAULT 让数据库生成 UUID
-    std::string sql;
-    pqxx::params params;
-
-    if (f.id.empty()) {
-        sql =
+    pqxx::row row = f.id.empty()
+        ? txn.exec_params1(
             "INSERT INTO files (name, size, hash, chunk_hashes, mime_type) "
             "VALUES ($1, $2, $3, $4, $5) "
-            "RETURNING id::text";
-        params.append(f.name);
-        params.append(f.size);
-        params.append(f.hash);
-        params.append(f.chunk_hashes);
-        params.append(f.mime_type);
-    } else {
-        sql =
+            "RETURNING id::text",
+            f.name,
+            f.size,
+            f.hash,
+            f.chunk_hashes,
+            f.mime_type)
+        : txn.exec_params1(
             "INSERT INTO files (id, name, size, hash, chunk_hashes, mime_type) "
             "VALUES ($1, $2, $3, $4, $5, $6) "
-            "RETURNING id::text";
-        params.append(f.id);
-        params.append(f.name);
-        params.append(f.size);
-        params.append(f.hash);
-        params.append(f.chunk_hashes);
-        params.append(f.mime_type);
-    }
+            "RETURNING id::text",
+            f.id,
+            f.name,
+            f.size,
+            f.hash,
+            f.chunk_hashes,
+            f.mime_type);
 
-    auto row = txn.exec_params1(sql, params);
-    std::string generated_id = row[0].as<std::string>();
+    const std::string generated_id = row[0].as<std::string>();
 
     txn.commit();
     return generated_id;
@@ -88,7 +81,7 @@ std::optional<FileRecord> FileDao::find_by_id(const std::string& id)
         "       to_char(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') as created_at "
         "FROM files "
         "WHERE id = $1 AND deleted_at IS NULL",
-        pqxx::params(id)
+        id
     );
 
     if (result.empty()) {
@@ -119,7 +112,7 @@ std::optional<FileRecord> FileDao::find_by_hash(const std::string& hash)
         "FROM files "
         "WHERE hash = $1 AND deleted_at IS NULL "
         "LIMIT 1",
-        pqxx::params(hash)
+        hash
     );
 
     if (result.empty()) {
@@ -146,10 +139,41 @@ void FileDao::soft_delete(const std::string& id)
 
     txn.exec_params(
         "UPDATE files SET deleted_at = NOW() WHERE id = $1",
-        pqxx::params(id)
+        id
     );
 
     txn.commit();
+}
+
+std::vector<FileRecord> FileDao::list_active(int limit)
+{
+    auto guard = pool_.acquire();
+    pqxx::work txn(*guard);
+
+    auto result = txn.exec_params(
+        "SELECT id::text, name, size, hash, chunk_hashes::text, mime_type, "
+        "       to_char(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') as created_at "
+        "FROM files "
+        "WHERE deleted_at IS NULL "
+        "ORDER BY created_at DESC "
+        "LIMIT $1",
+        limit
+    );
+
+    std::vector<FileRecord> records;
+    records.reserve(result.size());
+    for (const auto& row : result) {
+        FileRecord rec;
+        rec.id           = row[0].as<std::string>();
+        rec.name         = row[1].as<std::string>();
+        rec.size         = row[2].as<int64_t>();
+        rec.hash         = row[3].as<std::string>();
+        rec.chunk_hashes = row[4].as<std::string>();
+        rec.mime_type    = row[5].as<std::string>();
+        rec.created_at   = row[6].as<std::string>();
+        records.push_back(std::move(rec));
+    }
+    return records;
 }
 
 } // namespace solar_metadata

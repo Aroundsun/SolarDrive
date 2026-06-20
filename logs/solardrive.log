@@ -1,0 +1,47 @@
+[2026-06-19 10:56:23.692] [info] [204481] config loaded from config/config.local.yaml
+[2026-06-19 10:56:23.692] [info] [204481] listening port: 8080
+[2026-06-19 10:56:23.692] [info] [204481] worker threads: 4
+[2026-06-19 10:56:23.693] [info] [204481] storage path: /tmp/solardrive/objects
+[2026-06-19 10:56:23.693] [info] [204481] database: 127.0.0.1:5432/solardrive
+[2026-06-19 10:56:23.693] [info] [204481] redis: 127.0.0.1:6379
+[2026-06-19 10:56:23.693] [info] [204481] web root: web
+[2026-06-19 10:56:23.893] [info] [204481] database tables ready
+[2026-06-19 10:56:23.894] [info] [204481] Redis connected
+[2026-06-19 10:56:23.898] [info] [204481] SolarDrive started
+[2026-06-19 10:56:23.898] [info] [204481] web UI (VM local):     http://127.0.0.1:8080/
+[2026-06-19 10:56:23.898] [info] [204481] metrics UI (VM local): http://127.0.0.1:8080/metrics.html
+[2026-06-19 10:56:23.898] [info] [204481] metrics API (VM local): http://127.0.0.1:8080/metrics
+[2026-06-19 10:56:23.899] [info] [204481] web UI (LAN/host):     http://192.168.192.129:8080/
+[2026-06-19 10:56:23.899] [info] [204481] metrics UI (LAN/host): http://192.168.192.129:8080/metrics.html
+[2026-06-19 10:56:23.899] [info] [204481] metrics API (LAN/host): http://192.168.192.129:8080/metrics
+[2026-06-19 10:56:23.899] [info] [204481] metrics UI: http://127.0.0.1:8080/metrics.html
+[2026-06-19 10:56:23.901] [info] [204481] EventLoopThreadPool: started with 4 IO thread(s)
+[2026-06-19 10:56:26.631] [debug] [204491] new connection: SolarDrive-1#192.168.192.1:60737
+[2026-06-19 10:56:26.636] [debug] [204491] connection closed: SolarDrive-1#192.168.192.1:60737
+[2026-06-19 10:56:29.171] [debug] [204492] new connection: SolarDrive-2#192.168.192.1:60318
+[2026-06-19 10:56:29.174] [debug] [204492] connection closed: SolarDrive-2#192.168.192.1:60318
+[2026-06-19 10:56:29.780] [debug] [204493] new connection: SolarDrive-3#127.0.0.1:51126
+[2026-06-19 10:56:29.781] [debug] [204494] new connection: SolarDrive-4#127.0.0.1:51134
+[2026-06-19 10:56:29.863] [debug] [204493] connection closed: SolarDrive-3#127.0.0.1:51126
+[2026-06-19 10:56:32.243] [debug] [204491] new connection: SolarDrive-5#127.0.0.1:51148
+[2026-06-19 10:56:32.247] [debug] [204494] connection closed: SolarDrive-4#127.0.0.1:51134
+[2026-06-19 10:56:45.415] [debug] [204492] new connection: SolarDrive-6#192.168.192.1:55134
+[2026-06-19 10:56:45.418] [debug] [204492] connection closed: SolarDrive-6#192.168.192.1:55134
+[2026-06-19 10:57:02.059] [debug] [204493] new connection: SolarDrive-7#192.168.192.1:56068
+[2026-06-19 10:57:02.062] [debug] [204493] connection closed: SolarDrive-7#192.168.192.1:56068
+[2026-06-19 11:20:20.148] [debug] [204491] connection closed: SolarDrive-5#127.0.0.1:51148
+[2026-06-19 11:20:20.152] [debug] [204494] new connection: SolarDrive-8#127.0.0.1:49960
+[2026-06-19 11:20:20.152] [debug] [204491] new connection: SolarDrive-9#127.0.0.1:49970
+[2026-06-19 11:20:20.157] [debug] [204494] connection closed: SolarDrive-8#127.0.0.1:49960
+[2026-06-19 11:20:52.592] [debug] [204492] new connection: SolarDrive-10#192.168.192.1:59432
+[2026-06-19 11:20:52.592] [debug] [204493] new connection: SolarDrive-11#192.168.192.1:51927
+[2026-06-19 11:20:52.610] [debug] [204492] connection closed: SolarDrive-10#192.168.192.1:59432
+[2026-06-19 11:20:52.695] [debug] [204494] new connection: SolarDrive-12#192.168.192.1:63522
+[2026-06-19 11:20:52.698] [debug] [204493] connection closed: SolarDrive-11#192.168.192.1:51927
+[2026-06-19 11:20:52.717] [debug] [204494] connection closed: SolarDrive-12#192.168.192.1:63522
+[2026-06-19 11:20:52.805] [debug] [204491] new connection: SolarDrive-13#192.168.192.1:63563
+[2026-06-19 11:20:52.808] [debug] [204491] connection closed: SolarDrive-13#192.168.192.1:63563
+[2026-06-19 11:20:57.275] [debug] [204492] new connection: SolarDrive-14#192.168.192.1:61229
+[2026-06-19 11:20:57.424] [debug] [204493] new connection: SolarDrive-15#192.168.192.1:54694
+[2026-06-19 11:20:57.428] [debug] [204492] connection closed: SolarDrive-14#192.168.192.1:61229
+[2026-06-19 11:20:57.496] [debug] [204494] new connection: SolarDrive-

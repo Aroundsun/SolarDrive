@@ -1,0 +1,40 @@
+# SolarDrive 服务配置
+# Docker 容器内使用：postgres（服务名）、redis（服务名）
+# 本地开发使用：127.0.0.1
+
+server:
+  port: 8080
+  threads: 4
+  max_connections: 10000
+
+storage:
+  base_path: "/tmp/solardrive/objects"
+  chunk_size: 4194304
+
+database:
+  host: "postgres"
+  port: 5432
+  dbname: "solardrive"
+  user: "postgres"
+  password: "postgres"
+  pool_size: 8
+
+redis:
+  host: "redis"
+  port: 6379
+  password: ""
+
+jwt:
+  secret: "solardrive-prod-secret-change-me"
+  ttl_hours: 168
+
+logging:
+  level: "info"
+  file: "logs/solardrive.log"
+  max_size_mb: 10
+  max_files: 5
+
+limits:
+  rate_limit_per_ip: 100
+  max_file_size_mb: 10240      # 10GB
+  storage_quota_per_user_gb: 10

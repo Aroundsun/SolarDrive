@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SolarDrive · 监控</title>
+  <link rel="stylesheet" href="/style.css?v=4">
+</head>
+<body>
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <div class="app metrics-app">
+    <header class="header">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">📊</div>
+        <div>
+          <h1>监控面板</h1>
+          <p class="subtitle">Prometheus 指标 · 自动刷新</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-pill" id="status-pill">
+          <span class="status-dot"></span>
+          <span id="status-text">加载中…</span>
+        </div>
+        <a href="/" class="btn btn-ghost btn-sm">返回云盘</a>
+        <button type="button" class="btn btn-ghost btn-sm" id="refresh-btn">立即刷新</button>
+      </div>
+    </header>
+
+    <section class="metrics-meta card">
+      <div class="metrics-meta-item">
+        <span class="metrics-meta-label">数据源</span>
+        <code>/metrics</code>
+      </div>
+      <div class="metrics-meta-item">
+        <span class="metrics-meta-label">上次更新</span>
+        <span id="updated-at">—</span>
+      </div>
+      <div class="metrics-meta-item">
+        <span class="metrics-meta-label">刷新间隔</span>
+        <span>5 秒</span>
+      </div>
+    </section>
+
+    <section class="metrics-grid" id="metrics-grid">
+      <div class="metric-card card skeleton">
+        <p>加载指标中…</p>
+      </div>
+    </section>
+
+    <section class="card metrics-raw">
+      <div class="metrics-raw-head">
+        <h2>原始 Prometheus 文本</h2>
+        <button type="button" class="btn btn-ghost btn-sm" id="toggle-raw-btn">展开</button>
+      </div>
+      <pre id="raw-metrics" hidden></pre>
+    </section>
+
+    <footer class="footer">
+      <span>Prometheus: <code>GET /metrics</code></span>
+      <span id="footer-hint">Grafana 可直接抓取此端点</span>
+    </footer>
+  </div>
+
+  <script src="/metrics.js?v=1"></script>
+</body>
+</html>
