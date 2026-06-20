@@ -1,3 +1,6 @@
+// =============================================================================
+// event_loop_thread_pool.cpp — 线程池启动与 round-robin 选 loop
+// =============================================================================
 #include "event_loop_thread_pool.h"
 #include "event_loop.h"
 #include "event_loop_thread.h"
@@ -40,6 +43,7 @@ EventLoop* EventLoopThreadPool::get_next_loop() {
     base_loop_->assert_in_loop_thread();
 
     if (loops_.empty()) {
+        // 单线程模式：无 IO 子线程，accept 与连接读写均在 base_loop
         return base_loop_;
     }
 

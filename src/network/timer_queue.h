@@ -1,3 +1,13 @@
+// =============================================================================
+// timer_queue.h — SolarDrive 网络层：定时器队列
+//
+// 模块职责：
+//   - 用 std::set 按到期时间排序 Timer；timerfd 纳入 epoll，与 I/O 统一 Reactor 循环
+//   - get_next_timeout_ms() 供 EventLoop 设置 epoll_wait 超时，避免单独轮询定时器
+//
+// Reactor 模式要点：
+//   timerfd 可读 → handle_read 取出到期 Timer 执行；最早定时器变化时 reset_timerfd。
+// =============================================================================
 #pragma once
 
 #include <memory>
@@ -10,8 +20,8 @@ namespace solar_net {
 
 class Channel;
 class EventLoop;
-// 定时器队列，用于管理定时器
 
+/// 定时器队列：timerfd + Channel，与 EpollPoller 共用同一 EventLoop。
 class TimerQueue {
 public:
     using TimerEntry = std::pair<Timestamp, Timer*>;

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SolarDrive · 接收分享</title>
+  <link rel="stylesheet" href="/style.css?v=10">
+</head>
+<body>
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <div class="app" id="app">
+    <header class="header">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">🔗</div>
+        <div>
+          <h1>接收分享</h1>
+          <p class="subtitle">粘贴分享链接或短码，打开预览、保存到网盘或下载到本地</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="/" class="btn btn-ghost btn-sm">返回云盘</a>
+      </div>
+    </header>
+
+    <section class="card open-share-card" id="open-share-card">
+      <div class="open-share-body">
+        <div class="open-share-fields">
+          <label class="field">
+            <span>分享链接 / 短码</span>
+            <input type="text" id="open-share-input" class="open-share-input" autocomplete="off"
+                   placeholder="https://…/share.html?token=abc12345">
+          </label>
+          <label class="field">
+            <span>访问密码</span>
+            <input type="password" id="open-share-password" autocomplete="off"
+                   placeholder="无密码可留空">
+          </label>
+        </div>
+        <div class="open-share-actions" role="group" aria-label="分享操作">
+          <button type="button" class="btn btn-ghost open-share-action" id="open-share-open-btn">
+            <span class="open-share-action-icon" aria-hidden="true">↗</span>
+            <span class="open-share-action-label">打开</span>
+            <span class="open-share-action-hint">浏览器内预览</span>
+          </button>
+          <button type="button" class="btn btn-ghost open-share-action" id="open-share-save-btn">
+            <span class="open-share-action-icon" aria-hidden="true">☁</span>
+            <span class="open-share-action-label">保存</span>
+            <span class="open-share-action-hint">存入我的文件</span>
+          </button>
+          <button type="button" class="btn btn-primary open-share-action" id="open-share-download-btn">
+            <span class="open-share-action-icon" aria-hidden="true">↓</span>
+            <span class="open-share-action-label">下载</span>
+            <span class="open-share-action-hint">保存到本地</span>
+          </button>
+        </div>
+        <p class="open-share-status" id="open-share-status" hidden></p>
+      </div>
+    </section>
+
+    <footer class="footer auth-page-footer">
+      <a href="/login.html" class="footer-link">登录云盘</a>
+      <a href="/metrics.html" class="footer-link">监控面板</a>
+    </footer>
+  </div>
+
+  <div class="toast-stack" id="toast-stack"></div>
+
+  <script src="/session.js?v=2"></script>
+  <script src="/ui.js?v=1"></script>
+  <script src="/api.js?v=1"></script>
+  <script src="/receive.js?v=2"></script>
+</body>
+</html>

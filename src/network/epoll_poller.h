@@ -1,3 +1,13 @@
+// =============================================================================
+// epoll_poller.h — SolarDrive 网络层：epoll I/O 多路复用器
+//
+// 模块职责：
+//   - 封装 epoll_create1 / epoll_wait / epoll_ctl，是 Reactor 的 Demultiplexer
+//   - 维护 fd → Channel* 映射；epoll_event.data.ptr 直接存 Channel 指针，避免查表
+//
+// Reactor 模式要点：
+//   poll() 阻塞等待就绪 fd，将 revents 写入各 Channel 后返回 active_channels_ 供 EventLoop 分发。
+// =============================================================================
 #pragma once
 
 #include <sys/epoll.h>
@@ -11,8 +21,7 @@ namespace solar_net {
 class Channel;
 class EventLoop;
 
-// Epoll 基于的 I/O 多路复用器， 属于一个 EventLoop
-// 不是线程安全的 —— 必须只能从它的拥有者 EventLoop 线程访问
+/// epoll 多路复用器，隶属于唯一 EventLoop，非线程安全。
 class EpollPoller {
 public:
     // 构造一个 poller 用于给定的 event loop

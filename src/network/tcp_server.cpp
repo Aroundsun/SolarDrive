@@ -1,3 +1,6 @@
+// =============================================================================
+// tcp_server.cpp — TcpServer 启动/停止与新连接分发
+// =============================================================================
 #include "tcp_server.h"
 #include "acceptor.h"
 #include "event_loop.h"
@@ -87,6 +90,7 @@ void TcpServer::stop_in_loop() {
     std::vector<std::future<void>> cleanups;
     cleanups.reserve(conns.size());
 
+    // 跨 IO 线程并行关闭连接，每连接在所属 loop 上 force_close 后通过 promise 同步
     for (const auto& conn : conns) {
         std::promise<void> done;
         cleanups.push_back(done.get_future());
@@ -116,6 +120,7 @@ void TcpServer::new_connection(int fd, const ::sockaddr_in& peer_addr) {
         return;
     }
 
+    // round-robin 选取 IO EventLoop，在对应线程上建立 TcpConnection
     EventLoop* io_loop = thread_pool_->get_next_loop();
 
     char buf[64] = {};
@@ -142,6 +147,7 @@ void TcpServer::new_connection(int fd, const ::sockaddr_in& peer_addr) {
         }
     );
 
+    // connection_established 必须在 IO loop 线程执行（enable_reading 等）
     io_loop->run_in_loop([conn]() {
         conn->connection_established();
     });
@@ -162,6 +168,7 @@ void TcpServer::remove_connection_in_loop(const std::shared_ptr<TcpConnection>& 
         connections_.erase(it);
     }
 
+    // 连接销毁在 IO loop 执行；从 connections_ 移除在主 loop
     EventLoop* io_loop = conn->get_loop();
     io_loop->queue_in_loop([conn]() {
         conn->connection_destroyed();

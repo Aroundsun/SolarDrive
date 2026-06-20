@@ -1,3 +1,6 @@
+// =============================================================================
+// epoll_poller.cpp — epoll 等待与 Channel 注册/更新/移除
+// =============================================================================
 #include "epoll_poller.h"
 #include "channel.h"
 #include "event_loop.h"
@@ -51,9 +54,7 @@ int64_t EpollPoller::poll(int timeout_ms, std::vector<Channel*>* active_channels
 }
 
 
-// 从 epoll 事件数组中填充 active_channels
-// @param num_events 事件数
-// @param active_channels 有待处理事件的通道
+// 从 epoll 返回事件中还原 Channel 指针（注册时写入 ev.data.ptr）
 void EpollPoller::fill_active_channels(int num_events,
                                         std::vector<Channel*>* active_channels) {
     // 遍历 epoll 事件数组，填充 active_channels
@@ -67,7 +68,7 @@ void EpollPoller::fill_active_channels(int num_events,
 void EpollPoller::update_channel(Channel* channel) {
     int fd = channel->fd();
     if (channel->is_none_event()) {
-        // 如果没有兴趣事件，从 epoll 中移除
+        // 兴趣事件为空时从 epoll 移除，而非保留零事件监听
         if (has_channel(channel)) {
             epoll_update(EPOLL_CTL_DEL, channel);
             channels_.erase(fd);

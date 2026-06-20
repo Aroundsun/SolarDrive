@@ -1,3 +1,9 @@
+// ---------------------------------------------------------------------------
+// config.cpp
+//
+// 配置加载实现：解析 YAML 配置文件，按节映射到 AppConfig 各字段。
+// ---------------------------------------------------------------------------
+
 #include "config.h"
 #include <yaml-cpp/yaml.h>
 #include <iostream>
@@ -15,20 +21,20 @@ AppConfig AppConfig::load_from_file(const std::string& path) {
     try {
         YAML::Node root = YAML::LoadFile(path);
 
-        // server
+        // HTTP 服务
         if (auto node = root["server"]) {
             if (node["port"])             cfg.server.port            = node["port"].as<uint16_t>();
             if (node["threads"])          cfg.server.threads         = node["threads"].as<int>();
             if (node["max_connections"])  cfg.server.max_connections = node["max_connections"].as<int>();
         }
 
-        // storage
+        // 对象存储
         if (auto node = root["storage"]) {
             if (node["base_path"])  cfg.storage.base_path  = node["base_path"].as<std::string>();
             if (node["chunk_size"]) cfg.storage.chunk_size = node["chunk_size"].as<size_t>();
         }
 
-        // database
+        // 数据库
         if (auto node = root["database"]) {
             if (node["host"])     cfg.database.host     = node["host"].as<std::string>();
             if (node["port"])     cfg.database.port     = node["port"].as<uint16_t>();
@@ -38,20 +44,20 @@ AppConfig AppConfig::load_from_file(const std::string& path) {
             if (node["pool_size"])cfg.database.pool_size= node["pool_size"].as<int>();
         }
 
-        // redis
+        // Redis 缓存
         if (auto node = root["redis"]) {
             if (node["host"])     cfg.redis.host     = node["host"].as<std::string>();
             if (node["port"])     cfg.redis.port     = node["port"].as<uint16_t>();
             if (node["password"]) cfg.redis.password = node["password"].as<std::string>();
         }
 
-        // jwt
+        // JWT 认证
         if (auto node = root["jwt"]) {
             if (node["secret"])    cfg.jwt.secret    = node["secret"].as<std::string>();
             if (node["ttl_hours"]) cfg.jwt.ttl_hours = node["ttl_hours"].as<int>();
         }
 
-        // logging
+        // 日志
         if (auto node = root["logging"]) {
             if (node["level"])        cfg.logging.level       = node["level"].as<std::string>();
             if (node["file"])         cfg.logging.file        = node["file"].as<std::string>();
@@ -59,7 +65,7 @@ AppConfig AppConfig::load_from_file(const std::string& path) {
             if (node["max_files"])    cfg.logging.max_files   = node["max_files"].as<int>();
         }
 
-        // limits
+        // 限流与配额
         if (auto node = root["limits"]) {
             if (node["rate_limit_per_ip"])        cfg.limits.rate_limit_per_ip      = node["rate_limit_per_ip"].as<int>();
             if (node["max_file_size_mb"])         cfg.limits.max_file_size_mb       = node["max_file_size_mb"].as<int>();
@@ -67,6 +73,7 @@ AppConfig AppConfig::load_from_file(const std::string& path) {
         }
 
     } catch (const YAML::Exception& e) {
+        // YAML 解析失败：降级为默认配置，不中断启动
         std::cerr << "[config] WARN: failed to load '" << path
                   << "': " << e.what() << "\n"
                   << "[config] Using default configuration.\n";

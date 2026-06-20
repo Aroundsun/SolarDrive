@@ -1,3 +1,10 @@
+// =============================================================================
+// event_loop_thread_pool.h — SolarDrive 网络层：IO EventLoop 线程池
+//
+// 模块职责：
+//   - 创建 num_threads_ 个 EventLoopThread，收集各 IO EventLoop
+//   - get_next_loop() round-robin 分配新连接；num_threads_=0 时退化为单线程（base_loop）
+// =============================================================================
 #pragma once
 
 #include <vector>
@@ -9,8 +16,7 @@ namespace solar_net {
 class EventLoop;
 class EventLoopThread;
 
-/// EventLoopThreads 的池。用于通过循环调度将连接分配到多个 IO 线程。
-/// 每个 IO 线程有一个 EventLoop，用于处理连接。
+/// IO 线程池：多 Reactor 实例，主 loop 负责 accept，连接 round-robin 到 IO loop。
 class EventLoopThreadPool {
 public:
     using ThreadInitCallback = std::function<void(EventLoop*)>;

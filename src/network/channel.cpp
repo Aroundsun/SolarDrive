@@ -1,3 +1,6 @@
+// =============================================================================
+// channel.cpp — Channel 事件分发与 epoll 兴趣事件更新
+// =============================================================================
 #include "channel.h"
 #include "event_loop.h"
 
@@ -37,7 +40,7 @@ void Channel::handle_event_with_guard() {
         error_cb_();
     }
 
-    // 处理挂起 / 关闭事件
+    // EPOLLHUP 且无 EPOLLIN：对端关闭写端；若同时可读则先读尽剩余数据再关
     if ((revents_ & (EPOLLHUP)) && !(revents_ & EPOLLIN)) {
         if (close_cb_) {
             close_cb_();

@@ -1,3 +1,7 @@
+// =============================================================================
+// object_store.h — 内容寻址对象存储
+// SolarDrive 存储层：SHA-256 去重、分块读写、本地文件系统布局
+// =============================================================================
 #pragma once
 
 #include <string>
@@ -11,23 +15,26 @@ namespace solar_storage {
 // 支持去重（相同内容只存储一份）和分块存储
 class ObjectStore {
 public:
-    static constexpr size_t CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
+    static constexpr size_t DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;
 
-    explicit ObjectStore(const std::string& base_path);
+    explicit ObjectStore(const std::string& base_path,
+                         size_t chunk_size = DEFAULT_CHUNK_SIZE);
 
-    // 写入数据，返回 SHA-256 hex string
+    size_t chunk_size() const { return chunk_size_; }
+
+    /// 写入整段数据，返回 SHA-256 hex；已存在则跳过写入（去重）
     std::string put(const std::string& data);
 
-    // 读取数据
+    /// 按 hash 读取完整对象
     std::string get(const std::string& hash) const;
 
-    // 检查是否存在
+    /// 检查对象是否已存在于存储目录
     bool exists(const std::string& hash) const;
 
-    // 分块写入，返回每个 chunk 的 hash 列表
+    /// 分块写入，返回各 chunk 的 hash 列表（供元数据 chunk_hashes 字段）
     std::vector<std::string> put_chunked(const std::string& data);
 
-    // 从 chunk hash 列表还原完整数据
+    /// 按 chunk hash 顺序拼接还原完整文件内容
     std::string get_chunked(const std::vector<std::string>& hashes) const;
 
     // 计算 SHA-256
@@ -38,6 +45,7 @@ private:
     std::string hash_to_path(const std::string& hash) const;
 
     std::string base_path_;
+    size_t      chunk_size_;
 };
 
 } // namespace solar_storage

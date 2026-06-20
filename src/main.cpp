@@ -1,3 +1,10 @@
+// =============================================================================
+// main.cpp — SolarDrive 进程入口
+//
+// 职责：加载配置、初始化存储/数据库/Redis、注册 HTTP 路由、启动 Reactor 网络服务。
+// 请求链路：TcpConnection → HttpParser → 静态资源 / 鉴权中间件 → HttpRouter → Handler
+// =============================================================================
+
 #include <memory>
 #include <iostream>
 #include <cstdlib>
@@ -24,27 +31,36 @@
 #include "http/static_handler.h"
 #include "storage/object_store.h"
 #include "metadata/db_pool.h"
+#include "metadata/schema.h"
 #include "metadata/file_dao.h"
-#include "api/upload_handler.h"
+#include "metadata/folder_dao.h"
 #include "api/download_handler.h"
+#include "api/file_handler.h"
+#include "api/route_registry.h"
 #include "api/auth_handler.h"
 #include "api/multipart_upload_handler.h"
+#include "api/share_handler.h"
+#include "api/folder_handler.h"
 #include "auth/jwt.h"
 #include "auth/auth_middleware.h"
 #include "auth/user_dao.h"
 #include "cache/redis_client.h"
 #include "config/config.h"
 #include "monitor/metrics.h"
+#include "ws/ws_upgrade.h"
+#include "ws/ws_handler.h"
+#include "ws/ws_session.h"
 
 #include <pqxx/except>
-#include <nlohmann/json.hpp>
 
 namespace {
 
+// 检查 Web 根目录下是否存在 index.html
 bool web_root_has_index(const std::string& root) {
     return std::ifstream(root + "/index.html").good();
 }
 
+// 解析 Web 静态资源目录：环境变量 → 当前目录 web → 可执行文件旁 ../web
 std::string resolve_web_root(const char* env_path) {
     if (env_path && env_path[0] != '\0' && web_root_has_index(env_path)) {
         return env_path;
@@ -73,8 +89,8 @@ std::string resolve_web_root(const char* env_path) {
 
 struct CliOptions {
     std::string config_path = "config/config.yaml";
-    bool config_explicit = false;
-    std::optional<uint16_t> port_override;
+    bool config_explicit = false;          // 用户是否显式指定配置文件
+    std::optional<uint16_t> port_override; // 命令行端口覆盖 YAML
 };
 
 void print_usage(const char* prog) {
@@ -143,6 +159,7 @@ solar_net::log::Level parse_log_level(const std::string& level) {
     return solar_net::log::Level::Info;
 }
 
+// 环境变量优先级高于 YAML 配置
 void apply_env_overrides(solar_config::AppConfig& cfg, std::string& db_conn) {
     db_conn = cfg.database.conn_str();
 
@@ -181,6 +198,7 @@ bool init_logging(const solar_config::LogConfig& log_cfg) {
     return solar_net::log::init(opts);
 }
 
+// 统计每次 HTTP 响应：总请求数 + 错误数（供 Prometheus）
 void record_response_metrics(const solar_http::HttpResponse& resp) {
     solar_monitor::Metrics::inc_requests();
     if (resp.status_code_ >= 400) {
@@ -222,9 +240,11 @@ void log_access_urls(uint16_t port) {
 
 } // namespace
 
+// 全局指针，供信号处理函数优雅退出
 solar_net::EventLoop* g_main_loop = nullptr;
 solar_net::TcpServer* g_server   = nullptr;
 
+// SIGINT / SIGTERM：停止 accept 与事件循环
 void signal_handler(int) {
     if (solar_net::log::is_initialized()) {
         SNLOG_INFO("received shutdown signal");
@@ -236,6 +256,7 @@ void signal_handler(int) {
 }
 
 int main(int argc, char* argv[]) {
+    // ---- 1. 配置与日志 ----
     const CliOptions cli = parse_cli(argc, argv);
     solar_config::AppConfig cfg = solar_config::AppConfig::load_from_file(cli.config_path);
 
@@ -260,11 +281,15 @@ int main(int argc, char* argv[]) {
     SNLOG_INFO("listening port: {}", cfg.server.port);
     SNLOG_INFO("worker threads: {}", cfg.server.threads);
     SNLOG_INFO("storage path: {}", cfg.storage.base_path);
+    SNLOG_INFO("chunk_size: {} bytes", cfg.storage.chunk_size);
+    SNLOG_INFO("max_file_size: {} MB", cfg.limits.max_file_size_mb);
+    SNLOG_INFO("jwt ttl: {} hours", cfg.jwt.ttl_hours);
     SNLOG_INFO("database: {}:{}/{}", cfg.database.host, cfg.database.port, cfg.database.dbname);
     SNLOG_INFO("redis: {}:{}", cfg.redis.host, cfg.redis.port);
     SNLOG_INFO("web root: {}", web_dir);
 
-    solar_storage::ObjectStore store(cfg.storage.base_path);
+    // ---- 2. 存储与元数据层 ----
+    solar_storage::ObjectStore store(cfg.storage.base_path, cfg.storage.chunk_size);
 
     std::unique_ptr<solar_metadata::DbPool> db_pool;
     try {
@@ -276,15 +301,21 @@ int main(int argc, char* argv[]) {
         std::_Exit(1);
     }
 
-    solar_metadata::FileDao file_dao(*db_pool);
-
     try {
-        file_dao.create_table();
-        SNLOG_INFO("database tables ready");
+        if (solar_metadata::bootstrap_schema(*db_pool)) {
+            SNLOG_WARN("database migrated to schema v2: file metadata tables were dropped and recreated");
+        }
+        SNLOG_INFO("database schema ready (v2)");
     } catch (const std::exception& e) {
-        SNLOG_WARN("create_table: {}", e.what());
+        SNLOG_CRITICAL("bootstrap_schema failed: {}", e.what());
+        solar_net::log::shutdown();
+        std::_Exit(1);
     }
 
+    solar_metadata::FileDao file_dao(*db_pool);
+    solar_metadata::FolderDao folder_dao(*db_pool);
+
+    // ---- 3. Redis 缓存与 JWT ----
     auto redis = std::make_shared<solar_cache::RedisClient>(
         cfg.redis.host, cfg.redis.port);
     if (redis->ping()) {
@@ -296,17 +327,34 @@ int main(int argc, char* argv[]) {
     solar_auth::JwtUtil::set_secret(cfg.jwt.secret);
 
     auto user_dao = std::make_shared<solar_auth::UserDao>(*db_pool);
-    try {
-        user_dao->create_table();
-    } catch (const std::exception& e) {
-        SNLOG_WARN("create users table: {}", e.what());
-    }
 
-    solar_api::AuthHandler auth_handler(user_dao);
-    solar_api::UploadHandler   upload_handler(store, file_dao);
+    // ---- 4. 业务 Handler 实例 ----
+    solar_api::AuthHandler auth_handler(user_dao, cfg.jwt.ttl_hours);
     solar_api::DownloadHandler download_handler(store, file_dao);
-    solar_api::MultipartUploadHandler multipart_handler(store, file_dao, redis);
+    solar_api::MultipartUploadHandler multipart_handler(
+        store, file_dao, folder_dao, redis,
+        cfg.storage.chunk_size, cfg.limits.max_file_size_bytes());
 
+    auto share_dao = std::make_shared<solar_api::ShareDao>(*db_pool);
+    solar_api::ShareHandler share_handler(share_dao, file_dao, store, redis);
+    solar_api::FolderHandler folder_handler(folder_dao, file_dao);
+    solar_api::FileHandler file_handler(file_dao);
+
+    const solar_api::AppServices services{
+        cfg,
+        store,
+        file_dao,
+        folder_dao,
+        redis,
+        auth_handler,
+        download_handler,
+        multipart_handler,
+        share_handler,
+        folder_handler,
+        file_handler,
+    };
+
+    // ---- 5. 网络服务：主 EventLoop + 多线程 TcpServer ----
     solar_net::EventLoop main_loop;
     g_main_loop = &main_loop;
 
@@ -322,118 +370,25 @@ int main(int argc, char* argv[]) {
 
     auto router = std::make_shared<solar_http::HttpRouter>();
     auto static_handler = std::make_shared<solar_http::StaticHandler>(web_dir);
+    solar_api::register_api_routes(router, services);
 
-    router->get("/api/v1/health", [](const solar_http::HttpRequest&,
-                                       solar_http::HttpResponse& resp) {
-        resp.set_json(R"({"status":"ok","service":"SolarDrive"})");
-    });
-
-    router->get("/metrics", [](const solar_http::HttpRequest&,
-                                 solar_http::HttpResponse& resp) {
-        resp.set_body(solar_monitor::Metrics::dump());
-        resp.set_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
-    });
-
-    router->post("/api/v1/auth/register", [&](const solar_http::HttpRequest& req,
-                                                solar_http::HttpResponse& resp) {
-        auth_handler.handle_register(req, resp);
-    });
-
-    router->post("/api/v1/auth/login", [&](const solar_http::HttpRequest& req,
-                                             solar_http::HttpResponse& resp) {
-        auth_handler.handle_login(req, resp);
-    });
-
-    router->post("/api/v1/upload", [&](const solar_http::HttpRequest& req,
-                                        solar_http::HttpResponse& resp) {
-        try {
-            solar_api::MultipartUploadHandler::handle_upload_with_redis(
-                req, resp, store, file_dao, redis);
-        } catch (const std::exception& e) {
-            resp.set_error(500, std::string("upload failed: ") + e.what());
-        }
-    });
-
-    router->post("/api/v1/upload/init", [&](const solar_http::HttpRequest& req,
-                                              solar_http::HttpResponse& resp) {
-        multipart_handler.handle_init(req, resp);
-    });
-
-    router->put("/api/v1/upload/{upload_id}/part/{part_num}",
-        [&](const solar_http::HttpRequest& req, solar_http::HttpResponse& resp) {
-            multipart_handler.handle_upload_part(req, resp);
-        });
-
-    router->post("/api/v1/upload/{upload_id}/complete",
-        [&](const solar_http::HttpRequest& req, solar_http::HttpResponse& resp) {
-            multipart_handler.handle_complete(req, resp);
-        });
-
-    router->get("/api/v1/upload/{upload_id}",
-        [&](const solar_http::HttpRequest& req, solar_http::HttpResponse& resp) {
-            multipart_handler.handle_status(req, resp);
-        });
-
-    router->del("/api/v1/upload/{upload_id}",
-        [&](const solar_http::HttpRequest& req, solar_http::HttpResponse& resp) {
-            multipart_handler.handle_abort(req, resp);
-        });
-
-    router->get("/api/v1/files", [&](const solar_http::HttpRequest& req,
-                                      solar_http::HttpResponse& resp) {
-        (void)req;
-        try {
-            nlohmann::json files = nlohmann::json::array();
-            for (const auto& f : file_dao.list_active()) {
-                files.push_back({
-                    {"id", f.id},
-                    {"name", f.name},
-                    {"size", f.size},
-                    {"hash", f.hash},
-                    {"mime_type", f.mime_type},
-                    {"created_at", f.created_at},
-                });
-            }
-            resp.set_json(nlohmann::json({{"files", files}}).dump());
-        } catch (const std::exception& e) {
-            resp.set_error(500, std::string("list failed: ") + e.what());
-        }
-    });
-
-    router->get("/api/v1/files/{id}", [&](const solar_http::HttpRequest& req,
-                                           solar_http::HttpResponse& resp) {
-        try {
-            download_handler.handle(req, resp);
-        } catch (const std::exception& e) {
-            resp.set_error(500, std::string("download failed: ") + e.what());
-        }
-    });
-
-    router->del("/api/v1/files/{id}", [&](const solar_http::HttpRequest& req,
-                                           solar_http::HttpResponse& resp) {
-        try {
-            auto it = req.path_params().find("id");
-            if (it == req.path_params().end()) {
-                resp.set_error(400, "missing file id");
-                return;
-            }
-            file_dao.soft_delete(it->second);
-            resp.set_json(R"({"deleted":true})");
-        } catch (const std::exception& e) {
-            resp.set_error(500, std::string("delete failed: ") + e.what());
-        }
-    });
-
+    // ---- 7. 连接回调：HTTP 解析 或 WebSocket 升级后的 WsHandler ----
     server.set_connection_callback(
-        [router, static_handler](const solar_net::TcpConnectionPtr& conn) {
+        [router, static_handler, redis = services.redis](const solar_net::TcpConnectionPtr& conn) {
             if (conn->state() == solar_net::TcpConnection::State::kConnected) {
                 solar_monitor::Metrics::inc_active_connections();
                 SNLOG_DEBUG("new connection: {}", conn->name());
 
                 auto parser = std::make_shared<solar_http::HttpParser>(
-                    [conn, router, static_handler](const solar_http::HttpRequest& req) {
+                    [conn, router, static_handler, redis](solar_http::HttpRequest& req) {
+                        // WebSocket Upgrade 优先处理（/ws/metrics、/ws/upload/{id}）
+                        if (solar_ws::try_handle_upgrade(req, conn, redis)) {
+                            return;
+                        }
+
                         solar_http::HttpResponse resp;
 
+                        // GET 优先尝试静态资源（Web UI、share.html 等）
                         if (req.method() == solar_http::HttpMethod::GET &&
                             static_handler->try_serve(req, resp)) {
                             record_response_metrics(resp);
@@ -441,6 +396,7 @@ int main(int argc, char* argv[]) {
                             return;
                         }
 
+                        // 非白名单 API 需 JWT 鉴权，结果写入 req 供 Handler 只读
                         if (!solar_auth::AuthMiddleware::is_whitelisted(req.path())) {
                             auto auth_result = solar_auth::AuthMiddleware::authenticate(req);
                             if (!auth_result.authenticated) {
@@ -449,6 +405,7 @@ int main(int argc, char* argv[]) {
                                 conn->send(resp.serialize());
                                 return;
                             }
+                            req.set_auth_user(auth_result.user_id, auth_result.username);
                         }
 
                         router->dispatch(req, resp);
@@ -459,25 +416,42 @@ int main(int argc, char* argv[]) {
                 conn->set_context(parser);
             } else if (conn->state() == solar_net::TcpConnection::State::kDisconnected) {
                 solar_monitor::Metrics::dec_active_connections();
+                solar_ws::WsSessionManager::instance().remove_session(conn);
                 SNLOG_DEBUG("connection closed: {}", conn->name());
             }
         }
     );
 
+    // 读事件：根据连接上下文分发给 HttpParser 或 WsHandler
     server.set_message_callback(
         [&](const solar_net::TcpConnectionPtr& conn,
              solar_net::Buffer* buf,
              int64_t) {
-            auto parser = std::any_cast<std::shared_ptr<solar_http::HttpParser>>(
-                conn->get_context()
-            );
             const size_t readable = buf->readable_bytes();
-            if (readable == 0) return;
+            if (readable == 0) {
+                return;
+            }
+
+            const auto& ctx = conn->get_context();
+            if (ctx.type() == typeid(std::shared_ptr<solar_ws::WsHandler>)) {
+                auto ws = std::any_cast<std::shared_ptr<solar_ws::WsHandler>>(ctx);
+                const size_t consumed = ws->feed(
+                    reinterpret_cast<const char*>(buf->data()), readable);
+                buf->retrieve(consumed);
+                return;
+            }
+
+            auto parser = std::any_cast<std::shared_ptr<solar_http::HttpParser>>(ctx);
             const size_t consumed = parser->feed(
                 reinterpret_cast<const char*>(buf->data()), readable);
             buf->retrieve(consumed);
         }
     );
+
+    // 每 5 秒向 /ws/metrics 订阅者推送指标（替代前端轮询）
+    main_loop.run_every(5.0, []() {
+        solar_ws::WsSessionManager::instance().broadcast_metrics();
+    });
 
     std::signal(SIGINT,  signal_handler);
     std::signal(SIGTERM, signal_handler);

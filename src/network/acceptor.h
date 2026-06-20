@@ -1,3 +1,10 @@
+// =============================================================================
+// acceptor.h — SolarDrive 网络层：TCP 监听与 accept
+//
+// 模块职责：
+//   - 创建监听 socket，在 EventLoop 上通过 Channel 监听可读（新连接就绪）
+//   - accept 循环直到 EAGAIN；EMFILE 时用 idle_fd_ 技巧丢弃连接并保留 accept 能力
+// =============================================================================
 #pragma once
 
 #include <netinet/in.h>
@@ -12,7 +19,7 @@ class Channel;
 class EventLoop;
 class Socket;
 
-/// 在指定地址上监听并接受新的 TCP 连接。
+/// 监听 socket 的 Reactor Handler：可读时 accept 并回调 new_connection_cb_。
 class Acceptor {
 public:
     using NewConnectionCallback = std::function<void(int sockfd, const ::sockaddr_in& peer_addr)>;

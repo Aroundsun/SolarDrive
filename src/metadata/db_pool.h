@@ -1,3 +1,7 @@
+// =============================================================================
+// db_pool.h — PostgreSQL 连接池
+// SolarDrive 元数据层：线程安全连接复用，RAII Guard 自动归还
+// =============================================================================
 #pragma once
 
 #include <pqxx/pqxx>
@@ -27,6 +31,7 @@ public:
         Guard(Guard&&) = default;
         Guard& operator=(Guard&&) = default;
 
+        /// 透传 pqxx::connection 指针/引用，便于 txn(*guard) 用法
         pqxx::connection* operator->() { return conn_.get(); }
         pqxx::connection& operator*() { return *conn_; }
 
@@ -39,6 +44,7 @@ public:
     Guard acquire();
 
 private:
+    /// 将连接放回队列并唤醒等待线程
     void release(std::unique_ptr<pqxx::connection> conn);
 
     std::queue<std::unique_ptr<pqxx::connection>> pool_;

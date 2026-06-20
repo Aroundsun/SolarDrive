@@ -1,3 +1,9 @@
+// ---------------------------------------------------------------------------
+// redis_client.cpp
+//
+// Redis 客户端实现：封装 hiredis 命令调用与 reply 生命周期管理。
+// ---------------------------------------------------------------------------
+
 #include "redis_client.h"
 #include <cstring>
 #include <iostream>
@@ -42,6 +48,7 @@ bool RedisClient::set(const std::string& key, const std::string& value, int ttl_
     redisReply* reply = static_cast<redisReply*>(
         redisCommand(ctx_, "SET %s %s", key.c_str(), value.c_str()));
     bool ok = (reply && reply->type == REDIS_REPLY_STATUS);
+    // SET 成功后按需追加 EXPIRE
     if (ok && ttl_seconds > 0) {
         freeReplyObject(reply);
         reply = static_cast<redisReply*>(
@@ -116,6 +123,15 @@ std::optional<std::string> RedisClient::hget(const std::string& key, const std::
     return std::nullopt;
 }
 
+bool RedisClient::expire(const std::string& key, int ttl_seconds) {
+    if (!ctx_ || ttl_seconds <= 0) return false;
+    redisReply* reply = static_cast<redisReply*>(
+        redisCommand(ctx_, "EXPIRE %s %d", key.c_str(), ttl_seconds));
+    bool ok = (reply && reply->type == REDIS_REPLY_INTEGER && reply->integer == 1);
+    if (reply) freeReplyObject(reply);
+    return ok;
+}
+
 int64_t RedisClient::incr(const std::string& key, int ttl_seconds) {
     if (!ctx_) return -1;
     redisReply* reply = static_cast<redisReply*>(
@@ -127,7 +143,7 @@ int64_t RedisClient::incr(const std::string& key, int ttl_seconds) {
     int64_t val = static_cast<int64_t>(reply->integer);
     freeReplyObject(reply);
 
-    // 第一次创建时设置 TTL
+    // 计数器首次创建（值为 1）时设置过期窗口，用于滑动窗口限流
     if (val == 1 && ttl_seconds > 0) {
         reply = static_cast<redisReply*>(
             redisCommand(ctx_, "EXPIRE %s %d", key.c_str(), ttl_seconds));
