@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SolarDrive</title>
+  <link rel="stylesheet" href="/style.css?v=3">
+</head>
+<body>
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <div class="app" id="app" data-view="auth">
+    <header class="header">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">☀</div>
+        <div>
+          <h1>SolarDrive</h1>
+          <p class="subtitle">内容寻址云盘 · 登录 · 上传 · 秒传</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-pill" id="status-pill">
+          <span class="status-dot"></span>
+          <span id="status-text">连接中…</span>
+        </div>
+        <div class="user-bar" id="user-bar" hidden>
+          <span class="user-name" id="user-name"></span>
+          <button type="button" class="btn btn-ghost btn-sm" id="logout-btn">退出</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 登录 / 注册 -->
+    <section class="card auth-card" id="auth-card">
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-tab="login">登录</button>
+        <button type="button" class="auth-tab" data-tab="register">注册</button>
+      </div>
+
+      <form class="auth-form" id="login-form">
+        <label class="field">
+          <span>用户名</span>
+          <input type="text" id="login-username" name="username" autocomplete="username" required>
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="btn btn-primary btn-block">登录</button>
+      </form>
+
+      <form class="auth-form" id="register-form" hidden>
+        <label class="field">
+          <span>用户名</span>
+          <input type="text" id="register-username" name="username" autocomplete="username" required>
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input type="password" id="register-password" name="password" autocomplete="new-password" required>
+        </label>
+        <button type="submit" class="btn btn-primary btn-block">注册并登录</button>
+      </form>
+    </section>
+
+    <!-- 主功能（登录后显示） -->
+    <main class="main" id="main-panel" hidden>
+      <section class="card upload-card">
+        <h2>上传文件</h2>
+        <label class="dropzone" id="dropzone" for="file-input">
+          <input type="file" id="file-input" name="files" multiple
+                 accept="*/*" aria-label="选择要上传的文件">
+          <div class="dropzone-inner">
+            <div class="drop-icon">↑</div>
+            <p class="drop-title">拖拽文件到此处，或点击选择</p>
+            <p class="drop-hint">支持多文件 · 相同内容自动秒传</p>
+          </div>
+        </label>
+        <div class="upload-queue" id="upload-queue"></div>
+      </section>
+
+      <section class="card files-card">
+        <div class="files-head">
+          <h2>我的文件</h2>
+          <button type="button" class="btn btn-ghost" id="refresh-btn">刷新</button>
+        </div>
+        <div class="files-empty" id="files-empty" hidden>
+          <p>还没有文件，先上传一个吧</p>
+        </div>
+        <div class="table-wrap">
+          <table class="files-table" id="files-table" hidden>
+            <thead>
+              <tr>
+                <th>文件名</th>
+                <th>大小</th>
+                <th>上传时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="files-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>API: <code>/api/v1/*</code></span>
+      <span id="footer-stats"></span>
+      <a href="/metrics.html" class="footer-link">监控面板</a>
+    </footer>
+  </div>
+
+  <div class="toast-stack" id="toast-stack"></div>
+
+  <script src="/app.js?v=3"></script>
+</body>
+</html>

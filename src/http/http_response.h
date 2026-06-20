@@ -50,9 +50,9 @@ public:
     std::string serialize() const {
         std::ostringstream oss;
         oss << "HTTP/1.1 " << status_code_ << " " << status_text_ << "\r\n";
-        // 默认添加 Connection: keep-alive
+        // 短连接，避免自定义 HTTP 解析器在 keep-alive 复用时出问题
         if (headers_.find("Connection") == headers_.end()) {
-            oss << "Connection: keep-alive\r\n";
+            oss << "Connection: close\r\n";
         }
         for (const auto& [k, v] : headers_) {
             oss << k << ": " << v << "\r\n";

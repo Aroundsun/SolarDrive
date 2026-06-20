@@ -29,7 +29,6 @@ Acceptor::Acceptor(EventLoop* loop, const ::sockaddr_in& listen_addr)
     }
 
     Socket::set_reuse_addr(sock_fd);
-    Socket::set_reuse_port(sock_fd);
 
     // 绑定套接字
     int ret = ::bind(sock_fd,

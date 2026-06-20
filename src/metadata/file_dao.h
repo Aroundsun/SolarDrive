@@ -41,6 +41,9 @@ public:
     // 软删除
     void soft_delete(const std::string& id);
 
+    // 列出未删除的文件（按创建时间倒序）
+    std::vector<FileRecord> list_active(int limit = 200);
+
 private:
     DbPool& pool_;
 };

@@ -13,6 +13,10 @@ void HttpRouter::post(const std::string& pattern, HttpHandler handler) {
     add_route(HttpMethod::POST, pattern, std::move(handler));
 }
 
+void HttpRouter::put(const std::string& pattern, HttpHandler handler) {
+    add_route(HttpMethod::PUT, pattern, std::move(handler));
+}
+
 void HttpRouter::del(const std::string& pattern, HttpHandler handler) {
     add_route(HttpMethod::DELETE, pattern, std::move(handler));
 }
