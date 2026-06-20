@@ -1,3 +1,7 @@
+// =============================================================================
+// object_store.cpp — 内容寻址对象存储实现
+// SolarDrive 存储层：OpenSSL SHA-256、两级目录散列、mkdir 按需创建
+// =============================================================================
 #include "object_store.h"
 
 #include <openssl/evp.h>
@@ -12,8 +16,9 @@
 
 namespace solar_storage {
 
-ObjectStore::ObjectStore(const std::string& base_path)
+ObjectStore::ObjectStore(const std::string& base_path, size_t chunk_size)
     : base_path_(base_path)
+    , chunk_size_(chunk_size > 0 ? chunk_size : DEFAULT_CHUNK_SIZE)
 {
     // 确保 base_path_ 不以 '/' 结尾（统一处理）
     if (!base_path_.empty() && base_path_.back() == '/') {
@@ -141,11 +146,12 @@ std::vector<std::string> ObjectStore::put_chunked(const std::string& data)
 {
     std::vector<std::string> hashes;
 
+    // 按 CHUNK_SIZE 切分，每块独立 put（可跨文件复用相同 chunk）
     size_t total = data.size();
     size_t offset = 0;
 
     while (offset < total) {
-        size_t chunk_len = std::min(total - offset, CHUNK_SIZE);
+        size_t chunk_len = std::min(total - offset, chunk_size_);
         std::string chunk = data.substr(offset, chunk_len);
         std::string hash = put(chunk);
         hashes.push_back(hash);
@@ -162,6 +168,7 @@ std::vector<std::string> ObjectStore::put_chunked(const std::string& data)
 
 std::string ObjectStore::get_chunked(const std::vector<std::string>& hashes) const
 {
+    // 按元数据记录的 hash 顺序拼接各 chunk
     std::string result;
     for (const auto& hash : hashes) {
         result += get(hash);

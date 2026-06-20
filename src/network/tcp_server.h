@@ -1,3 +1,14 @@
+// =============================================================================
+// tcp_server.h — SolarDrive 网络层：多线程 TCP 服务器
+//
+// 模块职责：
+//   - 主 EventLoop 运行 Acceptor 接受新连接
+//   - EventLoopThreadPool 提供 IO 线程，新连接 round-robin 分配到各 IO EventLoop
+//   - 维护 connections_ 映射，协调跨线程的连接建立与销毁
+//
+// Reactor 模式要点：
+//   accept 在主 loop，读写在各 IO loop；跨线程通过 run_in_loop / queue_in_loop 投递。
+// =============================================================================
 #pragma once
 
 #include <cstdint>
@@ -15,8 +26,7 @@ class Acceptor;
 class TcpConnection;
 class Buffer;
 
-/// TCP 服务器。接受新的连接并将其分配到多个 IO 线程。
-/// 每个 IO 线程有一个 EventLoop，用于处理连接。
+/// 多线程 Reactor TCP 服务器：主 loop 接受连接，IO 线程池处理读写。
 class TcpServer {
 public:
     // 连接回调

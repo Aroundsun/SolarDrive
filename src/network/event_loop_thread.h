@@ -1,3 +1,10 @@
+// =============================================================================
+// event_loop_thread.h — SolarDrive 网络层：单 IO 线程
+//
+// 模块职责：
+//   - 在独立 std::thread 中创建并运行 EventLoop
+//   - start_loop() 阻塞直到 loop 就绪，供 TcpServer 线程池收集 EventLoop 指针
+// =============================================================================
 #pragma once
 
 #include <functional>
@@ -9,9 +16,7 @@ namespace solar_net {
 
 class EventLoop;
 
-/// 一个 IO 线程，拥有自己的 EventLoop。
-/// 在启动时调用线程初始化回调。
-/// 在专用线程中启动事件循环，并提供对循环的访问以进行连接分发。
+/// 单 IO 线程：thread 内构造 EventLoop 并 loop()，对外暴露 loop 指针。
 class EventLoopThread {
 public:
     using ThreadInitCallback = std::function<void(EventLoop*)>;

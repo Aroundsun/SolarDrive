@@ -1,3 +1,7 @@
+// =============================================================================
+// http_parser.h — HTTP/1.1 请求解析器
+// SolarDrive HTTP 层：逐字节状态机，解析方法/路径/头/body
+// =============================================================================
 #pragma once
 
 #include "http_request.h"
@@ -9,7 +13,8 @@
 
 namespace solar_http {
 
-using RequestCallback = std::function<void(const HttpRequest&)>;
+/// 完整请求解析完成后的回调（非 const，便于写入鉴权上下文）
+using RequestCallback = std::function<void(HttpRequest&)>;
 
 /// 轻量 HTTP/1.1 请求解析器
 /// 逐字节状态机，从 solar_net::Buffer 风格的数据中解析
@@ -31,6 +36,7 @@ public:
     const HttpRequest& request() const { return *cur_req_; }
 
 private:
+    /// 解析状态机各阶段
     enum class State {
         kStart,
         kMethod,
@@ -54,9 +60,13 @@ private:
         kDone
     };
 
+    /// 处理单个输入字节，驱动状态转移
     void parse_char(char c);
+    /// headers 结束：根据 Content-Length 进入 body 或标记完成
     void transition_to_body();
+    /// 触发 callback，将 cur_req_ 交给上层
     void fire_callback();
+    /// 新建 HttpRequest，清空当前 header 缓冲
     void reset_request();
 
     State            state_;

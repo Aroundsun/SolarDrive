@@ -1,11 +1,19 @@
+// ---------------------------------------------------------------------------
+// user_dao.cpp
+//
+// 用户 DAO 实现：密码哈希、用户注册/登录、存储用量更新。
+// ---------------------------------------------------------------------------
+
 #include "user_dao.h"
 #include <pqxx/pqxx>
+#include <pqxx/except>
 #include <openssl/evp.h>
 #include <iomanip>
 #include <sstream>
 
 namespace solar_auth {
 
+// 对明文密码做 SHA-256 哈希，输出十六进制字符串
 std::string UserDao::sha256(const std::string& input) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int  digest_len = 0;
@@ -24,35 +32,29 @@ std::string UserDao::sha256(const std::string& input) {
 UserDao::UserDao(solar_metadata::DbPool& pool) : pool_(pool) {}
 
 void UserDao::create_table() {
-    auto g = pool_.acquire();
-    pqxx::work tx(*g);
-    tx.exec(R"(
-        CREATE TABLE IF NOT EXISTS users (
-            id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            username      TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            storage_quota BIGINT NOT NULL DEFAULT 10737418240,
-            used_storage  BIGINT NOT NULL DEFAULT 0,
-            created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-    )");
-    tx.exec("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)");
-    tx.commit();
+    // Schema 由 bootstrap_schema() 统一管理
 }
 
-std::string UserDao::register_user(const std::string& username, const std::string& password) {
+std::optional<std::string> UserDao::register_user(const std::string& username,
+                                                   const std::string& password) {
     std::string hash = sha256(password);
     auto g = pool_.acquire();
     pqxx::work tx(*g);
-    auto r = tx.exec_params1(
-        "INSERT INTO users(username, password_hash) VALUES($1, $2) RETURNING id::text",
-        username, hash
-    );
-    tx.commit();
-    return r[0].as<std::string>();
+    try {
+        auto r = tx.exec_params1(
+            "INSERT INTO users(username, password_hash) VALUES($1, $2) RETURNING id::text",
+            username, hash
+        );
+        const std::string id = r[0].as<std::string>();
+        tx.commit();
+        return id;
+    } catch (const pqxx::unique_violation&) {
+        return std::nullopt;
+    }
 }
 
 std::optional<UserRecord> UserDao::login(const std::string& username, const std::string& password) {
+    // 将输入密码哈希后与库中 password_hash 比对
     std::string hash = sha256(password);
     auto g = pool_.acquire();
     pqxx::work tx(*g);
@@ -98,6 +100,7 @@ std::optional<UserRecord> UserDao::find_by_id(const std::string& id) {
 void UserDao::update_used_storage(const std::string& user_id, int64_t delta) {
     auto g = pool_.acquire();
     pqxx::work tx(*g);
+    // 原子增量更新，避免并发上传/删除时的竞态
     tx.exec_params(
         "UPDATE users SET used_storage = used_storage + $1 WHERE id = $2",
         delta, user_id

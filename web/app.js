@@ -1,243 +1,177 @@
-const API = '/api/v1';
-const TOKEN_KEY = 'solardrive_token';
-const USER_KEY = 'solardrive_user';
+/**
+ * SolarDrive 云盘主界面逻辑
+ *
+ * 模块：文件上传下载、分享创建与管理
+ * 登录见 login.html；接收分享见 receive.html
+ */
 
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
-
-const appRoot = $('#app');
+// ---- DOM 引用 ----
 const statusPill = $('#status-pill');
 const statusText = $('#status-text');
-const authCard = $('#auth-card');
 const mainPanel = $('#main-panel');
 const userBar = $('#user-bar');
 const userNameEl = $('#user-name');
-const loginForm = $('#login-form');
-const registerForm = $('#register-form');
 const dropzone = $('#dropzone');
 const fileInput = $('#file-input');
 const uploadQueue = $('#upload-queue');
 const filesTable = $('#files-table');
 const filesBody = $('#files-body');
 const filesEmpty = $('#files-empty');
+const filesLoading = $('#files-loading');
+const filesCard = $('.files-card');
+const folderBreadcrumb = $('#folder-breadcrumb');
+const newFolderBtn = $('#new-folder-btn');
+const uploadFolderHint = $('#upload-folder-hint');
 const refreshBtn = $('#refresh-btn');
+const sharesBody = $('#shares-body');
+const sharesTable = $('#shares-table');
+const sharesEmpty = $('#shares-empty');
+const sharesLoading = $('#shares-loading');
+const refreshSharesBtn = $('#refresh-shares-btn');
+const shareModal = $('#share-modal');
+const shareUrlInput = $('#share-url-input');
+const shareModalHint = $('#share-modal-hint');
+const shareCopyBtn = $('#share-copy-btn');
+const shareCloseBtn = $('#share-close-btn');
 const footerStats = $('#footer-stats');
-const toastStack = $('#toast-stack');
 
-let currentUser = null;
+let currentFolderId = null;
+let folderPath = [{ id: null, name: '全部文件' }];
 
-function toast(message, type = 'ok') {
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = message;
-  toastStack.appendChild(el);
-  setTimeout(() => el.remove(), 3200);
+function initPageIcons() {
+  $('#upload-section-icon').innerHTML = icon('upload', 'icon-sm');
+  $('#files-section-icon').innerHTML = icon('folder', 'icon-sm');
+  $('#shares-section-icon').innerHTML = icon('share', 'icon-sm');
+  $('#drop-icon').innerHTML = icon('upload', 'icon-lg');
+  $('#files-empty-icon').innerHTML = icon('folder', 'icon-lg');
+  $('#shares-empty-icon').innerHTML = icon('link', 'icon-lg');
+  $('#user-icon').innerHTML = icon('user', 'icon-sm');
+  setButtonIcon($('#receive-link'), 'receive', '接收分享');
+  setButtonIcon($('#logout-btn'), 'logout', '退出');
+  setButtonIcon(newFolderBtn, 'plus', '新建文件夹');
+  setButtonIcon(refreshBtn, 'refresh', '刷新');
+  setButtonIcon(refreshSharesBtn, 'refresh', '刷新');
 }
 
-function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || '';
+function setPanelLoading(panelEl, loadingEl, cardEl, loading) {
+  if (loadingEl) loadingEl.hidden = !loading;
+  if (cardEl) cardEl.classList.toggle('is-loading', loading);
+  if (panelEl) panelEl.style.pointerEvents = loading ? 'none' : '';
 }
 
-function saveSession(data) {
-  localStorage.setItem(TOKEN_KEY, data.token);
-  localStorage.setItem(USER_KEY, JSON.stringify({
-    user_id: data.user_id,
-    username: data.username,
-  }));
-  currentUser = { user_id: data.user_id, username: data.username };
-}
+function renderBreadcrumb() {
+  folderBreadcrumb.innerHTML = '';
+  folderPath.forEach((item, index) => {
+    if (index > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'breadcrumb-sep';
+      sep.innerHTML = icon('chevronRight', 'icon-sm');
+      folderBreadcrumb.appendChild(sep);
+    }
 
-function clearSession() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-  currentUser = null;
-}
-
-function loadSession() {
-  const token = getToken();
-  const raw = localStorage.getItem(USER_KEY);
-  if (!token || !raw) return false;
-  try {
-    currentUser = JSON.parse(raw);
-    return true;
-  } catch {
-    clearSession();
-    return false;
-  }
-}
-
-function authHeaders(extra = {}) {
-  const headers = { ...extra };
-  const token = getToken();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
-}
-
-function formatSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
-function formatTime(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'breadcrumb-item';
+    if (index === folderPath.length - 1) {
+      btn.classList.add('is-current');
+    }
+    btn.innerHTML = `${index === 0 ? icon('home', 'icon-sm') : icon('folder', 'icon-sm')}<span>${escapeHtml(item.name)}</span>`;
+    btn.addEventListener('click', () => {
+      if (index === folderPath.length - 1) return;
+      navigateToFolder(item.id, folderPath.slice(0, index + 1));
+    });
+    folderBreadcrumb.appendChild(btn);
   });
+
+  const current = folderPath[folderPath.length - 1];
+  uploadFolderHint.textContent = current.id
+    ? `上传到「${current.name}」`
+    : '上传到根目录';
 }
 
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function navigateToFolder(folderId, path = null) {
+  currentFolderId = folderId || null;
+  if (path) {
+    folderPath = path;
+  }
+  renderBreadcrumb();
+  loadFiles();
 }
 
-async function apiRequest(url, options = {}) {
-  const { skipAuth = false, logoutOn401 = true, json = true, ...fetchOpts } = options;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
+function folderQuery(key, value) {
+  if (!value) return '';
+  return `?${key}=${encodeURIComponent(value)}`;
+}
 
-  const headers = skipAuth
-    ? { ...(fetchOpts.headers || {}) }
-    : authHeaders(fetchOpts.headers || {});
+function uploadExtraHeaders() {
+  return currentFolderId ? { 'X-Folder-Id': currentFolderId } : {};
+}
 
+function createIconButton(label, iconName, className = 'btn btn-ghost btn-sm btn-icon') {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = className;
+  btn.title = label;
+  setButtonIcon(btn, iconName, label);
+  return btn;
+}
+
+function initAppView() {
+  const user = getUser();
+  userNameEl.textContent = user ? user.username : '';
+  initPageIcons();
+  renderBreadcrumb();
+  loadShares({ logoutOn401: false }).catch(() => {});
+}
+
+function showShareModal(url, hasPassword) {
+  shareUrlInput.value = url;
+  shareModalHint.textContent = hasPassword
+    ? '链接已含密码保护，请将链接和密码一并发送给对方'
+    : '复制下方短链发送给他人即可下载';
+  shareModal.hidden = false;
+  setTimeout(() => {
+    shareUrlInput.focus();
+    shareUrlInput.select();
+  }, 0);
+}
+
+function hideShareModal() {
+  shareModal.hidden = true;
+}
+
+async function copyShareUrl() {
+  await copyText(shareUrlInput.value, shareUrlInput);
+}
+
+// ---- 我的文件：文件夹 + 列表 ----
+async function loadFiles(options = {}) {
+  if (!getToken()) return;
+  setPanelLoading(filesTable, filesLoading, filesCard, true);
   try {
-    const res = await fetch(url, { ...fetchOpts, headers, signal: ctrl.signal });
-    if (!res.ok) {
-      const text = await res.text();
-      let msg = res.statusText;
-      try {
-        const err = JSON.parse(text);
-        if (err.error) msg = err.error;
-      } catch { /* ignore */ }
-
-      if (res.status === 401 && !skipAuth && logoutOn401) {
-        handleUnauthorized();
-      }
-      throw new Error(msg);
-    }
-
-    if (!json) return res;
-    const ct = res.headers.get('Content-Type') || '';
-    if (ct.includes('application/json')) {
-      return res.json();
-    }
-    return res;
+    const [folderData, fileData] = await Promise.all([
+      apiRequest(`${API}/folders${folderQuery('parent_id', currentFolderId)}`, options),
+      apiRequest(`${API}/files${folderQuery('folder_id', currentFolderId)}`, options),
+    ]);
+    renderBrowse(folderData.folders || [], fileData.files || []);
+  } catch (err) {
+    toast(`加载文件列表失败: ${err.message}`, 'err');
   } finally {
-    clearTimeout(timer);
-  }
-}
-
-function handleUnauthorized() {
-  clearSession();
-  showAuthView();
-  toast('登录已过期，请重新登录', 'err');
-}
-
-function showAuthView() {
-  appRoot.dataset.view = 'auth';
-  authCard.hidden = false;
-  mainPanel.hidden = true;
-  userBar.hidden = true;
-  filesBody.innerHTML = '';
-  uploadQueue.innerHTML = '';
-}
-
-function showAppView() {
-  appRoot.dataset.view = 'app';
-  authCard.hidden = true;
-  mainPanel.hidden = false;
-  userBar.hidden = false;
-  userNameEl.textContent = currentUser ? currentUser.username : '';
-}
-
-function switchAuthTab(tab) {
-  $$('.auth-tab').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
-  });
-  loginForm.hidden = tab !== 'login';
-  registerForm.hidden = tab !== 'register';
-}
-
-async function checkHealth() {
-  try {
-    const data = await apiRequest(`${API}/health`, { skipAuth: true });
-    statusPill.classList.add('online');
-    statusPill.classList.remove('offline');
-    statusText.textContent = data.service || '在线';
-  } catch {
-    statusPill.classList.add('offline');
-    statusPill.classList.remove('online');
-    statusText.textContent = '服务离线';
-  }
-}
-
-async function login(username, password) {
-  const data = await apiRequest(`${API}/auth/login`, {
-    method: 'POST',
-    skipAuth: true,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
-  saveSession(data);
-  showAppView();
-  toast(`欢迎回来，${data.username}`);
-  try {
-    await loadFiles({ logoutOn401: false });
-  } catch (err) {
-    toast(`加载文件列表失败: ${err.message}`, 'err');
-  }
-}
-
-async function register(username, password) {
-  const data = await apiRequest(`${API}/auth/register`, {
-    method: 'POST',
-    skipAuth: true,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
-  saveSession(data);
-  showAppView();
-  toast(`注册成功，${data.username}`);
-  try {
-    await loadFiles({ logoutOn401: false });
-  } catch (err) {
-    toast(`加载文件列表失败: ${err.message}`, 'err');
+    setPanelLoading(filesTable, filesLoading, filesCard, false);
   }
 }
 
 function logout() {
   clearSession();
-  showAuthView();
-  toast('已退出登录');
+  redirectToLogin();
 }
 
-async function loadFiles(options = {}) {
-  if (!getToken()) return;
-  try {
-    const data = await apiRequest(`${API}/files`, options);
-    renderFiles(data.files || []);
-  } catch (err) {
-    toast(`加载文件列表失败: ${err.message}`, 'err');
-  }
-}
-
-function renderFiles(files) {
+function renderBrowse(folders, files) {
   filesBody.innerHTML = '';
-  footerStats.textContent = `${files.length} 个文件`;
+  const total = folders.length + files.length;
+  footerStats.textContent = `${total} 项 · ${folderPath[folderPath.length - 1].name}`;
 
-  if (files.length === 0) {
+  if (total === 0) {
     filesTable.hidden = true;
     filesEmpty.hidden = false;
     return;
@@ -246,14 +180,64 @@ function renderFiles(files) {
   filesEmpty.hidden = true;
   filesTable.hidden = false;
 
+  for (const folder of folders) {
+    const tr = document.createElement('tr');
+    tr.className = 'folder-row';
+
+    const nameTd = document.createElement('td');
+    nameTd.innerHTML = `
+      <div class="file-row-main">
+        <div class="file-row-icon folder">${icon('folder')}</div>
+        <div class="file-name">
+          <strong>${escapeHtml(folder.name)}</strong>
+          <span class="file-id">文件夹</span>
+        </div>
+      </div>`;
+
+    const sizeTd = document.createElement('td');
+    sizeTd.textContent = '—';
+
+    const timeTd = document.createElement('td');
+    timeTd.textContent = formatTime(folder.created_at);
+
+    const actionsTd = document.createElement('td');
+    actionsTd.className = 'actions';
+
+    const openBtn = createIconButton('打开', 'folder');
+    openBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      enterFolder(folder);
+    });
+
+    const renameBtn = createIconButton('重命名', 'edit');
+    renameBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      renameFolder(folder);
+    });
+
+    const deleteBtn = createIconButton('删除', 'trash', 'btn btn-danger btn-sm btn-icon');
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteFolder(folder);
+    });
+
+    actionsTd.append(openBtn, renameBtn, deleteBtn);
+    tr.append(nameTd, sizeTd, timeTd, actionsTd);
+    tr.addEventListener('click', () => enterFolder(folder));
+    filesBody.appendChild(tr);
+  }
+
   for (const file of files) {
     const tr = document.createElement('tr');
 
     const nameTd = document.createElement('td');
     nameTd.innerHTML = `
-      <div class="file-name">
-        <strong>${escapeHtml(file.name)}</strong>
-        <span class="file-id">${escapeHtml(file.id)}</span>
+      <div class="file-row-main">
+        <div class="file-row-icon">${icon('file')}</div>
+        <div class="file-name">
+          <strong>${escapeHtml(file.name)}</strong>
+          <span class="file-id">${escapeHtml(file.id.slice(0, 8))}…</span>
+        </div>
       </div>`;
 
     const sizeTd = document.createElement('td');
@@ -265,36 +249,183 @@ function renderFiles(files) {
     const actionsTd = document.createElement('td');
     actionsTd.className = 'actions';
 
-    const downloadBtn = document.createElement('button');
-    downloadBtn.type = 'button';
-    downloadBtn.className = 'btn btn-primary';
-    downloadBtn.textContent = '下载';
+    const downloadBtn = createIconButton('下载', 'download', 'btn btn-primary btn-sm btn-icon');
     downloadBtn.addEventListener('click', () => downloadFile(file));
 
-    const copyBtn = document.createElement('button');
-    copyBtn.type = 'button';
-    copyBtn.className = 'btn btn-ghost';
-    copyBtn.textContent = '复制 ID';
+    const shareBtn = createIconButton('分享', 'share');
+    shareBtn.addEventListener('click', () => shareFile(file));
+
+    const copyBtn = createIconButton('复制 ID', 'copy');
     copyBtn.addEventListener('click', () => copyId(file.id));
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'btn btn-danger';
-    deleteBtn.textContent = '删除';
+    const deleteBtn = createIconButton('删除', 'trash', 'btn btn-danger btn-sm btn-icon');
     deleteBtn.addEventListener('click', () => deleteFile(file));
 
-    actionsTd.append(downloadBtn, copyBtn, deleteBtn);
+    actionsTd.append(downloadBtn, shareBtn, copyBtn, deleteBtn);
     tr.append(nameTd, sizeTd, timeTd, actionsTd);
     filesBody.appendChild(tr);
   }
 }
 
-async function copyId(id) {
+function enterFolder(folder) {
+  folderPath.push({ id: folder.id, name: folder.name });
+  navigateToFolder(folder.id, folderPath);
+}
+
+async function createFolderPrompt() {
+  const name = prompt('请输入文件夹名称');
+  if (!name || !name.trim()) return;
+
   try {
-    await navigator.clipboard.writeText(id);
-    toast('已复制 file_id');
-  } catch {
-    toast('复制失败', 'err');
+    await apiRequest(`${API}/folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name.trim(),
+        parent_id: currentFolderId,
+      }),
+    });
+    toast('文件夹已创建');
+    await loadFiles();
+  } catch (err) {
+    toast(`创建失败: ${err.message}`, 'err');
+  }
+}
+
+async function renameFolder(folder) {
+  const name = prompt('重命名文件夹', folder.name);
+  if (!name || !name.trim() || name.trim() === folder.name) return;
+
+  try {
+    await apiRequest(`${API}/folders/${encodeURIComponent(folder.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    toast('已重命名');
+    await loadFiles();
+  } catch (err) {
+    toast(`重命名失败: ${err.message}`, 'err');
+  }
+}
+
+async function deleteFolder(folder) {
+  if (!confirm(`确定删除文件夹「${folder.name}」吗？\n（需为空文件夹）`)) return;
+
+  try {
+    await apiRequest(`${API}/folders/${encodeURIComponent(folder.id)}`, {
+      method: 'DELETE',
+      json: false,
+    });
+    toast('文件夹已删除');
+    await loadFiles();
+  } catch (err) {
+    toast(`删除失败: ${err.message}`, 'err');
+  }
+}
+
+async function copyId(id) {
+  await copyText(id);
+}
+
+async function shareFile(file) {
+  const password = prompt('分享密码（留空表示无密码）') ?? '';
+  if (password === null) return;
+
+  const hoursRaw = prompt('有效时长（小时，留空表示永不过期）', '24');
+  if (hoursRaw === null) return;
+
+  const body = { file_id: file.id };
+  if (password.trim()) body.password = password.trim();
+  const hours = parseInt(hoursRaw, 10);
+  if (!Number.isNaN(hours) && hours > 0) body.expires_in_hours = hours;
+
+  try {
+    const data = await apiRequest(`${API}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const url = `${window.location.origin}${data.url}`;
+    showShareModal(url, data.has_password);
+    await copyText(url, shareUrlInput);
+    toast(`短链已生成：${data.share_token}`);
+    await loadShares();
+  } catch (err) {
+    toast(`创建分享失败: ${err.message}`, 'err');
+  }
+}
+
+// ---- 我的分享列表 ----
+async function loadShares(options = {}) {
+  if (!getToken()) return;
+  setPanelLoading(sharesTable, sharesLoading, $('.shares-card'), true);
+  try {
+    const shares = await apiRequest(`${API}/shares`, options);
+    renderShares(Array.isArray(shares) ? shares : []);
+  } catch (err) {
+    toast(`加载分享列表失败: ${err.message}`, 'err');
+  } finally {
+    setPanelLoading(sharesTable, sharesLoading, $('.shares-card'), false);
+  }
+}
+
+function renderShares(shares) {
+  sharesBody.innerHTML = '';
+
+  if (shares.length === 0) {
+    sharesTable.hidden = true;
+    sharesEmpty.hidden = false;
+    return;
+  }
+
+  sharesEmpty.hidden = true;
+  sharesTable.hidden = false;
+
+  for (const share of shares) {
+    const tr = document.createElement('tr');
+    const url = `${window.location.origin}${share.url}`;
+
+    const linkTd = document.createElement('td');
+    linkTd.innerHTML = `
+      <div class="file-name">
+        <strong class="share-link">${escapeHtml(share.url)}</strong>
+        <span class="file-id">${share.has_password ? '需密码' : '公开'}</span>
+      </div>`;
+
+    const fileTd = document.createElement('td');
+    fileTd.textContent = share.file_id.slice(0, 8) + '…';
+
+    const countTd = document.createElement('td');
+    const max = share.max_downloads > 0 ? share.max_downloads : '∞';
+    countTd.textContent = `${share.download_count} / ${max}`;
+
+    const actionsTd = document.createElement('td');
+    actionsTd.className = 'actions';
+
+    const copyBtn = createIconButton('复制短链', 'copy');
+    copyBtn.addEventListener('click', () => copyText(url));
+
+    const revokeBtn = createIconButton('撤销', 'trash', 'btn btn-danger btn-sm btn-icon');
+    revokeBtn.addEventListener('click', () => revokeShare(share.share_token));
+
+    actionsTd.append(copyBtn, revokeBtn);
+    tr.append(linkTd, fileTd, countTd, actionsTd);
+    sharesBody.appendChild(tr);
+  }
+}
+
+async function revokeShare(token) {
+  if (!confirm(`确定撤销分享 ${token} 吗？`)) return;
+  try {
+    await apiRequest(`${API}/share/${encodeURIComponent(token)}`, {
+      method: 'DELETE',
+      json: false,
+    });
+    toast('分享已撤销');
+    await loadShares();
+  } catch (err) {
+    toast(`撤销失败: ${err.message}`, 'err');
   }
 }
 
@@ -336,12 +467,88 @@ function createUploadItem(name) {
   const item = document.createElement('div');
   item.className = 'upload-item';
   item.innerHTML = `
-    <div class="upload-item-name">${escapeHtml(name)}</div>
+    <div class="upload-item-name">${icon('file', 'icon-sm')}<span>${escapeHtml(name)}</span></div>
     <div class="upload-item-meta">准备上传…</div>
-    <div class="progress-bar"><span></span></div>
+    <div class="progress-bar"><span class="is-active"></span></div>
   `;
   uploadQueue.prepend(item);
   return item;
+}
+
+// ---- 文件上传：小文件直传，大文件分片 + WebSocket 进度 ----
+const MULTIPART_THRESHOLD = 4 * 1024 * 1024;
+
+function connectUploadWs(uploadId, onMessage) {
+  const token = getToken();
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(
+    `${proto}//${location.host}/ws/upload/${uploadId}?token=${encodeURIComponent(token)}`
+  );
+  ws.onmessage = (event) => {
+    try {
+      onMessage(JSON.parse(event.data));
+    } catch {
+      // 忽略非 JSON 帧
+    }
+  };
+  return ws;
+}
+
+async function uploadFileMultipart(file, item, meta, bar) {
+  const initData = await apiRequest(`${API}/upload/init`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      file_name: file.name,
+      total_size: file.size,
+      mime_type: file.type || 'application/octet-stream',
+      folder_id: currentFolderId,
+    }),
+  });
+
+  const { upload_id: uploadId, chunk_size: chunkSize, chunk_count: chunkCount } = initData;
+  const ws = connectUploadWs(uploadId, (msg) => {
+    if (msg.type === 'progress') {
+      bar.style.width = `${msg.percent}%`;
+      bar.classList.add('is-active');
+      meta.textContent = `上传中 ${msg.percent}% · ${formatSize(msg.bytes_uploaded)}/${formatSize(msg.total_size)}`;
+    } else if (msg.type === 'complete') {
+      bar.style.width = '100%';
+      bar.classList.remove('is-active');
+    }
+  });
+
+  try {
+    for (let part = 0; part < chunkCount; part += 1) {
+      const start = part * chunkSize;
+      const end = Math.min(start + chunkSize, file.size);
+      const chunk = file.slice(start, end);
+
+      await apiRequest(`${API}/upload/${uploadId}/part/${part}`, {
+        method: 'PUT',
+        json: false,
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: chunk,
+      });
+    }
+
+    const data = await apiRequest(`${API}/upload/${uploadId}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+
+    bar.style.width = '100%';
+    bar.classList.remove('is-active');
+    item.classList.add('ok');
+    meta.textContent = `上传完成 · ${formatSize(data.size)} · ${data.file_id.slice(0, 8)}…`;
+    toast(`${file.name} 上传完成`);
+    await loadFiles();
+  } finally {
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      ws.close();
+    }
+  }
 }
 
 async function uploadFile(file) {
@@ -349,13 +556,19 @@ async function uploadFile(file) {
   const meta = item.querySelector('.upload-item-meta');
   const bar = item.querySelector('.progress-bar > span');
 
-  bar.style.width = '30%';
-
   try {
+    if (file.size > MULTIPART_THRESHOLD) {
+      meta.textContent = '分片上传中…';
+      await uploadFileMultipart(file, item, meta, bar);
+      return;
+    }
+
+    bar.style.width = '30%';
     const res = await apiRequest(`${API}/upload`, {
       method: 'POST',
       json: false,
       headers: {
+        ...uploadExtraHeaders(),
         'X-File-Name': encodeURIComponent(file.name),
         'Content-Type': file.type || 'application/octet-stream',
       },
@@ -372,6 +585,7 @@ async function uploadFile(file) {
     await loadFiles();
   } catch (err) {
     item.classList.add('err');
+    bar.classList.remove('is-active');
     meta.textContent = `失败: ${err.message}`;
     toast(`${file.name} 上传失败`, 'err');
   }
@@ -388,41 +602,9 @@ async function handleFiles(fileList) {
   }
 }
 
-$$('.auth-tab').forEach((btn) => {
-  btn.addEventListener('click', () => switchAuthTab(btn.dataset.tab));
-});
-
-loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const username = $('#login-username').value.trim();
-  const password = $('#login-password').value;
-  const submitBtn = loginForm.querySelector('button[type="submit"]');
-  submitBtn.disabled = true;
-  try {
-    await login(username, password);
-  } catch (err) {
-    toast(`登录失败: ${err.message}`, 'err');
-  } finally {
-    submitBtn.disabled = false;
-  }
-});
-
-registerForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const username = $('#register-username').value.trim();
-  const password = $('#register-password').value;
-  const submitBtn = registerForm.querySelector('button[type="submit"]');
-  submitBtn.disabled = true;
-  try {
-    await register(username, password);
-  } catch (err) {
-    toast(`注册失败: ${err.message}`, 'err');
-  } finally {
-    submitBtn.disabled = false;
-  }
-});
-
+// ---- 事件绑定与启动 ----
 $('#logout-btn').addEventListener('click', logout);
+newFolderBtn.addEventListener('click', createFolderPrompt);
 
 fileInput.addEventListener('change', (e) => {
   handleFiles(e.target.files);
@@ -445,17 +627,24 @@ dropzone.addEventListener('drop', (e) => {
 });
 
 refreshBtn.addEventListener('click', loadFiles);
+refreshSharesBtn.addEventListener('click', loadShares);
+shareCopyBtn.addEventListener('click', copyShareUrl);
+shareCloseBtn.addEventListener('click', hideShareModal);
+shareModal.addEventListener('click', (e) => {
+  if (e.target === shareModal) hideShareModal();
+});
 
-checkHealth();
-setInterval(checkHealth, 15000);
+checkHealth({ pill: statusPill, text: statusText, showLoading: true });
+setInterval(() => {
+  checkHealth({ pill: statusPill, text: statusText, showLoading: true });
+}, 15000);
 
-if (loadSession()) {
-  showAppView();
+if (!loadSession()) {
+  redirectToLogin();
+} else {
+  initAppView();
   loadFiles({ logoutOn401: false }).catch(() => {
     clearSession();
-    showAuthView();
-    toast('登录已过期，请重新登录', 'err');
+    redirectToLogin();
   });
-} else {
-  showAuthView();
 }

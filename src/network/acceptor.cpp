@@ -1,3 +1,6 @@
+// =============================================================================
+// acceptor.cpp — 监听 socket 创建、accept 循环与 EMFILE 处理
+// =============================================================================
 #include "acceptor.h"
 #include "channel.h"
 #include "event_loop.h"
@@ -88,9 +91,10 @@ uint16_t Acceptor::port() const {
 void Acceptor::handle_read() {
     loop_->assert_in_loop_thread();
 
-    ::sockaddr_in peer_addr{}; // 对端地址
-    int conn_fd = accept_one(&peer_addr); 
+    ::sockaddr_in peer_addr{};
+    int conn_fd = accept_one(&peer_addr);
 
+    // 边缘触发式语义：一次可读事件内 accept 直到 EAGAIN，避免遗留连接
     while (conn_fd >= 0) {
         if (new_connection_cb_) {
             new_connection_cb_(conn_fd, peer_addr);
@@ -124,8 +128,7 @@ int Acceptor::accept_one(::sockaddr_in* peer_addr) {
             // 没有更多的挂起连接
             break;
         case EMFILE:
-            // 打开的文件太多 — 关闭空闲文件描述符以释放一个槽,
-            // 然后关闭接受的文件描述符,然后重新打开空闲文件描述符
+            // 进程 fd 耗尽：临时关闭 idle_fd_ 占一个槽 accept 后立即关闭，再恢复 idle_fd_
             ::close(idle_fd_);
             idle_fd_ = ::accept(socket_->fd(), nullptr, nullptr);
             if (idle_fd_ >= 0) {

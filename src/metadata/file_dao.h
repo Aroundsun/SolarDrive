@@ -1,3 +1,6 @@
+// =============================================================================
+// file_dao.h — 用户文件目录项（files）+ 内容对象（content_objects，JOIN 视图）
+// =============================================================================
 #pragma once
 
 #include <string>
@@ -9,42 +12,57 @@
 
 namespace solar_metadata {
 
-// 文件元数据记录
 struct FileRecord {
-    std::string id;
+    std::string id;          // files.id（目录项）
     std::string name;
-    int64_t     size;
-    std::string hash;           // SHA-256
-    std::string chunk_hashes;   // JSON array string
+    int64_t     size = 0;
+    std::string hash;
+    std::string chunk_hashes;
     std::string mime_type;
     std::string created_at;
+    std::string owner_id;
+    std::string folder_id;   // 空 = 根目录
+    std::string content_id;  // content_objects.id
 };
 
-// 文件元数据 DAO
-// 负责 files 表的 CRUD 操作
 class FileDao {
 public:
     explicit FileDao(DbPool& pool);
 
-    // 建表，包含 files 表和必要的索引
     void create_table();
 
-    // 插入文件记录，返回生成的 UUID string
-    std::string insert(const FileRecord& f);
+    // 写入内容对象（去重）+ 新建目录项
+    std::string insert(const FileRecord& file);
 
-    // 通过 id 查询
+    // 仅新建目录项，指向已有 content_id（秒传 / 转存）
+    std::string insert_link(const FileRecord& file, const std::string& content_id);
+
     std::optional<FileRecord> find_by_id(const std::string& id);
 
-    // 通过 hash 查询（秒传用）
-    std::optional<FileRecord> find_by_hash(const std::string& hash);
+    std::optional<FileRecord> find_owned_by_id(const std::string& owner_id,
+                                               const std::string& id);
 
-    // 软删除
+    std::optional<FileRecord> find_content_by_hash(const std::string& hash);
+
     void soft_delete(const std::string& id);
 
-    // 列出未删除的文件（按创建时间倒序）
-    std::vector<FileRecord> list_active(int limit = 200);
+    std::vector<FileRecord> list_by_folder(const std::string& owner_id,
+                                           const std::string& folder_id,
+                                           int limit = 200);
+
+    int count_in_folder(const std::string& folder_id);
+
+    bool name_exists_in_folder(const std::string& owner_id,
+                               const std::string& folder_id,
+                               const std::string& name);
+
+    std::string make_unique_name(const std::string& name,
+                                 const std::string& owner_id,
+                                 const std::string& folder_id);
 
 private:
+    static void require_owner_id(const FileRecord& file);
+
     DbPool& pool_;
 };
 

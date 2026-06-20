@@ -1,3 +1,8 @@
+/**
+ * SolarDrive Prometheus 监控面板（metrics.html）
+ * 优先通过 WebSocket /ws/metrics 接收推送，失败时降级为轮询 /metrics
+ */
+
 const REFRESH_MS = 5000;
 
 const METRIC_META = {
@@ -34,8 +39,6 @@ const METRIC_META = {
   },
 };
 
-const $ = (sel) => document.querySelector(sel);
-
 const statusPill = $('#status-pill');
 const statusText = $('#status-text');
 const metricsGrid = $('#metrics-grid');
@@ -44,18 +47,12 @@ const rawMetrics = $('#raw-metrics');
 const refreshBtn = $('#refresh-btn');
 const toggleRawBtn = $('#toggle-raw-btn');
 
-let timer = null;
+let pollTimer = null;
+let metricsWs = null;
+let useWebSocket = false;
 
 function formatNumber(value) {
   return Number(value).toLocaleString('zh-CN');
-}
-
-function formatBytes(bytes) {
-  const n = Number(bytes);
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function formatValue(name, value) {
@@ -65,6 +62,7 @@ function formatValue(name, value) {
   return formatNumber(value);
 }
 
+/** 解析 Prometheus 文本格式为 { metric_name: value } */
 function parsePrometheus(text) {
   const metrics = {};
   const lines = text.split('\n');
@@ -83,6 +81,16 @@ function parsePrometheus(text) {
     }
   }
 
+  return metrics;
+}
+
+function metricsFromJson(data) {
+  const metrics = {};
+  for (const name of Object.keys(METRIC_META)) {
+    if (data[name] !== undefined) {
+      metrics[name] = String(data[name]);
+    }
+  }
   return metrics;
 }
 
@@ -116,6 +124,11 @@ function renderMetrics(metrics, rawText) {
   updatedAt.textContent = new Date().toLocaleString('zh-CN');
 }
 
+function handleMetricsPayload(metrics, rawText) {
+  renderMetrics(metrics, rawText);
+  setStatus(true, useWebSocket ? 'WebSocket 推送正常' : '指标正常');
+}
+
 async function loadMetrics() {
   try {
     const res = await fetch('/metrics', { cache: 'no-store' });
@@ -125,8 +138,7 @@ async function loadMetrics() {
 
     const text = await res.text();
     const metrics = parsePrometheus(text);
-    renderMetrics(metrics, text);
-    setStatus(true, '指标正常');
+    handleMetricsPayload(metrics, text);
   } catch (err) {
     setStatus(false, `加载失败: ${err.message}`);
     metricsGrid.innerHTML = `
@@ -138,9 +150,61 @@ async function loadMetrics() {
   }
 }
 
-function startAutoRefresh() {
-  if (timer) clearInterval(timer);
-  timer = setInterval(loadMetrics, REFRESH_MS);
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(loadMetrics, REFRESH_MS);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function connectMetricsWs() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/ws/metrics`);
+
+  ws.onopen = () => {
+    useWebSocket = true;
+    stopPolling();
+    setStatus(true, 'WebSocket 已连接');
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type !== 'metrics') return;
+      const metrics = metricsFromJson(data);
+      handleMetricsPayload(metrics, JSON.stringify(data, null, 2));
+    } catch {
+      // 忽略解析失败
+    }
+  };
+
+  ws.onerror = () => {
+    useWebSocket = false;
+    if (ws.readyState !== WebSocket.CLOSED) {
+      ws.close();
+    }
+    loadMetrics();
+    startPolling();
+    setStatus(false, 'WebSocket 不可用，已降级为轮询');
+  };
+
+  ws.onclose = () => {
+    if (useWebSocket) {
+      useWebSocket = false;
+      loadMetrics();
+      startPolling();
+      setStatus(false, 'WebSocket 已断开，已降级为轮询');
+    }
+    metricsWs = null;
+    setTimeout(connectMetricsWs, REFRESH_MS);
+  };
+
+  metricsWs = ws;
 }
 
 refreshBtn.addEventListener('click', loadMetrics);
@@ -151,5 +215,5 @@ toggleRawBtn.addEventListener('click', () => {
   toggleRawBtn.textContent = show ? '收起' : '展开';
 });
 
+connectMetricsWs();
 loadMetrics();
-startAutoRefresh();

@@ -1,3 +1,15 @@
+// =============================================================================
+// event_loop.h — SolarDrive 网络层：Reactor 事件循环
+//
+// 模块职责：
+//   - 单线程 Reactor 核心，每个 IO 线程持有一个 EventLoop
+//   - 聚合 EpollPoller（I/O 多路复用）、TimerQueue（定时器）、eventfd（跨线程唤醒）
+//   - 提供 run_in_loop / queue_in_loop，实现「在 IO 线程执行回调」的线程安全投递
+//
+// Reactor 模式要点：
+//   poll → 遍历 active_channels_ 调用 handle_event → do_pending_tasks
+//   跨线程 queue_in_loop 时通过 eventfd 唤醒阻塞在 epoll_wait 上的 loop 线程
+// =============================================================================
 #pragma once
 
 #include "timer.h"
@@ -15,8 +27,8 @@ class Channel;
 class EpollPoller;
 class TimerQueue;
 
-// 核心事件循环。每个线程一个。
-// 通过 EpollPoller 驱动 I/O 多路复用，并支持跨线程任务调度
+/// Reactor 事件循环：单线程驱动 epoll，分发 I/O 与定时器事件。
+/// 每个 IO 线程至多持有一个实例（thread_local 保证）；非线程安全，除 stop/run_in_loop 等标注项外须在 loop 线程访问。
 class EventLoop {
 public:
     using Task = std::function<void()>;

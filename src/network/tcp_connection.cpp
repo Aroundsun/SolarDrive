@@ -1,3 +1,6 @@
+// =============================================================================
+// tcp_connection.cpp — TCP 连接读写、发送缓冲与关闭流程
+// =============================================================================
 #include "tcp_connection.h"
 #include "channel.h"
 #include "event_loop.h"
@@ -140,6 +143,7 @@ void TcpConnection::connection_established() {
         return;
     }
 
+    // tie 保证 handle_read 等回调执行时 TcpConnection 仍存活
     channel_->tie(shared_from_this());
     channel_->enable_reading();
 
@@ -192,6 +196,7 @@ void TcpConnection::handle_write() {
         if (n > 0) {
             output_buffer_.retrieve(static_cast<std::size_t>(n));
             if (output_buffer_.readable_bytes() == 0) {
+                // 输出缓冲写尽后关闭 EPOLLOUT，避免空转唤醒
                 channel_->disable_writing();
 
                 if (write_complete_cb_) {
@@ -244,6 +249,7 @@ void TcpConnection::send_in_loop(const void* data, std::size_t len) {
     ssize_t nwrote = 0;
     std::size_t remaining = len;
 
+    // 未监听 EPOLLOUT 且输出缓冲为空时，尝试直接 write；EAGAIN 则入缓冲并 enable_writing
     if (!channel_->is_none_event() && !(channel_->events() & EPOLLOUT) &&
         output_buffer_.readable_bytes() == 0) {
         nwrote = ::write(socket_->fd(), data, len);
@@ -272,6 +278,7 @@ void TcpConnection::send_in_loop(const void* data, std::size_t len) {
 
         output_buffer_.append(static_cast<const uint8_t*>(data) + nwrote, remaining);
         if (!channel_->is_none_event() && !(channel_->events() & EPOLLOUT)) {
+            // 仍有数据待写，注册 EPOLLOUT 等待可写事件
             channel_->enable_writing();
         }
     }

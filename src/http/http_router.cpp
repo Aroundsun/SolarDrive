@@ -1,3 +1,7 @@
+// =============================================================================
+// http_router.cpp — HTTP 路由注册与分发实现
+// SolarDrive HTTP 层：pattern 转正则、路径参数提取、404 兜底
+// =============================================================================
 #include "http_router.h"
 #include "http_response.h"
 
@@ -65,6 +69,7 @@ std::string HttpRouter::pattern_to_regex(const std::string& pattern,
 }
 
 void HttpRouter::dispatch(const HttpRequest& req, HttpResponse& resp) const {
+    // 线性扫描已注册路由，匹配方法与路径
     for (const auto& r : routes_) {
         if (r.method != req.method()) continue;
 

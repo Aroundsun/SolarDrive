@@ -1,3 +1,7 @@
+# =============================================================================
+# SolarDrive — CMake 构建配置
+# 依赖：libpqxx、spdlog、hiredis、OpenSSL、yaml-cpp、nlohmann_json
+# =============================================================================
 cmake_minimum_required(VERSION 3.16)
 project(SolarDrive VERSION 0.1.0 LANGUAGES CXX)
 
@@ -59,6 +63,7 @@ file(GLOB_RECURSE SOLAR_SOURCES
     src/cache/*.cpp
     src/config/*.cpp
     src/monitor/*.cpp
+    src/ws/*.cpp
     src/main.cpp
 )
 

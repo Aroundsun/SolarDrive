@@ -1,3 +1,7 @@
+// =============================================================================
+// http_request.h — HTTP 请求数据结构
+// SolarDrive HTTP 层：由 HttpParser 填充，供 Router 与 Handler 使用
+// =============================================================================
 #pragma once
 
 #include <string>
@@ -21,6 +25,7 @@ class HttpRequest {
 public:
     HttpRequest() : method_(HttpMethod::UNKNOWN), content_length_(0) {}
 
+    // ---- 解析器写入接口 ----
     void set_method(HttpMethod m) { method_ = m; }
     void set_path(const std::string& p) { path_ = p; }
     void set_query(const std::string& q) { query_ = q; }
@@ -37,6 +42,7 @@ public:
     }
     const std::unordered_map<std::string, std::string>& path_params() const { return path_params_; }
 
+    // ---- 只读访问接口 ----
     HttpMethod method() const { return method_; }
     const std::string& path() const { return path_; }
     const std::string& query() const { return query_; }
@@ -44,16 +50,19 @@ public:
     const std::string& body() const { return body_; }
     const std::unordered_map<std::string, std::string>& headers() const { return headers_; }
 
+    /// 按 key 取 header，不存在返回空串
     std::string get_header(const std::string& key) const {
         auto it = headers_.find(key);
         return it != headers_.end() ? it->second : "";
     }
 
+    /// 从 Content-Length 头解析 body 长度
     size_t content_length() const {
         auto s = get_header("Content-Length");
         return s.empty() ? 0 : static_cast<size_t>(std::stoull(s));
     }
 
+    /// 重置为初始状态（连接复用时）
     void clear() {
         method_ = HttpMethod::UNKNOWN;
         path_.clear();
@@ -63,7 +72,18 @@ public:
         body_.clear();
         path_params_.clear();
         content_length_ = 0;
+        auth_user_id_.clear();
+        auth_username_.clear();
     }
+
+    // ---- 鉴权上下文（由 main 在路由前写入，Handler 只读） ----
+    void set_auth_user(const std::string& user_id, const std::string& username) {
+        auth_user_id_ = user_id;
+        auth_username_ = username;
+    }
+    bool has_auth_user() const { return !auth_user_id_.empty(); }
+    const std::string& auth_user_id() const { return auth_user_id_; }
+    const std::string& auth_username() const { return auth_username_; }
 
 private:
     HttpMethod method_;
@@ -74,6 +94,8 @@ private:
     std::unordered_map<std::string, std::string> path_params_;
     std::string body_;
     size_t content_length_;
+    std::string auth_user_id_;
+    std::string auth_username_;
 };
 
 } // namespace solar_http

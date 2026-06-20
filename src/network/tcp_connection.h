@@ -1,3 +1,15 @@
+// =============================================================================
+// tcp_connection.h — SolarDrive 网络层：TCP 连接
+//
+// 模块职责：
+//   - 表示一条已 accept 的 TCP 连接，绑定 Socket + Channel + 输入/输出 Buffer
+//   - send/shutdown/force_close 可从任意线程调用，内部 run_in_loop 投递到 IO 线程
+//   - shared_ptr + enable_shared_from_this 管理生命周期；Channel::tie 防止析构后回调
+//
+// Reactor 模式要点：
+//   可读 → handle_read 写入 input_buffer_ 并触发 message_cb_
+//   可写 → handle_write 从 output_buffer_ 写出；写缓冲非空时 enable_writing 监听 EPOLLOUT
+// =============================================================================
 #pragma once
 
 #include <netinet/in.h>
@@ -17,16 +29,15 @@ class Channel;
 class EventLoop;
 class Socket;
 
-/// TCP 连接， shared_ptr 管理。
-/// 表示一个已建立的 TCP 连接，带有读/写缓冲区。
+/// TCP 连接：shared_ptr 管理，在所属 EventLoop 上处理读写与关闭。
 class TcpConnection : public std::enable_shared_from_this<TcpConnection> {
 public:
     // 连接状态
     enum class State {
-        kConnecting, // 连接中
-        kConnected, // 已连接
-        kDisconnecting, // 断开连接中
-        kDisconnected // 断开连接
+        kConnecting,
+        kConnected,
+        kDisconnecting,
+        kDisconnected
     };
 
     // 连接回调
@@ -41,12 +52,6 @@ public:
     using HighWaterMarkCallback = std::function<void(const std::shared_ptr<TcpConnection>&,
                                                      std::size_t)>;
 
-    // 构造一个 TcpConnection.
-    // @param loop 拥有者 EventLoop.
-    // @param name 连接的名称.
-    // @param fd 套接字文件描述符.
-    // @param local_addr 本地地址.
-    // @param peer_addr 对端地址.
     TcpConnection(EventLoop* loop,
                    const std::string& name,
                    int fd,
@@ -55,64 +60,39 @@ public:
 
     ~TcpConnection();
 
-    // 获取拥有者 EventLoop.
     EventLoop* get_loop() const { return loop_; }
-
-    // 获取连接名称.
     const std::string& name() const { return name_; }
-
-    // 获取状态.
     State state() const { return state_.load(std::memory_order_acquire); }
-
-    // 获取底层的文件描述符.
     int fd() const;
 
-    // 发送数据到对端 (线程安全).
+    /// 线程安全：跨线程时拷贝数据并 run_in_loop 到 IO 线程发送
     void send(const void* data, std::size_t len);
-    // 发送字符串数据到对端.
     void send(const std::string& message);
-    // 发送缓冲区数据到对端.
     void send(Buffer* buffer);
 
-    // 关闭写端.
     void shutdown();
-
-    // 强制关闭连接.
     void force_close();
-
-    // 设置 TCP_NODELAY.
     void set_tcp_no_delay(bool on);
 
-    // ---- 设置回调 ----
-
-    // 设置连接回调.
     void set_connection_callback(ConnectionCallback cb) { connection_cb_ = std::move(cb); }
-    // 设置消息回调.
     void set_message_callback(MessageCallback cb) { message_cb_ = std::move(cb); }
-    // 设置写完成回调.
     void set_write_complete_callback(WriteCompleteCallback cb) { write_complete_cb_ = std::move(cb); }
-    // 设置缓冲区达到阈值时回调.
     void set_high_water_mark_callback(HighWaterMarkCallback cb, std::size_t mark) {
         high_water_mark_cb_ = std::move(cb);
         high_water_mark_ = mark;
     }
-    // 设置关闭回调.
     void set_close_callback(ConnectionCallback cb) { close_cb_ = std::move(cb); }
 
-    // 获取输入缓冲区.
     Buffer* input_buffer() { return &input_buffer_; }
-
-    // 获取输出缓冲区.
     Buffer* output_buffer() { return &output_buffer_; }
 
-    // 用户自定义上下文（如每条连接的 HttpParser）
     void set_context(std::any ctx) { context_ = std::move(ctx); }
     const std::any& get_context() const { return context_; }
 
-    // 当连接建立时调用.
+    /// 在 IO loop 上启用读监听并触发 connection_cb_（kConnected）
     void connection_established();
 
-    // 当连接销毁时调用.
+    /// 在 IO loop 上移除 Channel、释放 fd 监听
     void connection_destroyed();
 
 private:

@@ -1,3 +1,7 @@
+// =============================================================================
+// http_parser.cpp — HTTP/1.1 请求解析器实现
+// SolarDrive HTTP 层：状态机解析、keep-alive 复用、HTTP pipelining
+// =============================================================================
 #include "http_parser.h"
 #include "http_request.h"
 #include <cctype>
@@ -6,11 +10,13 @@
 
 namespace solar_http {
 
+// 将字符串转换为小写
 static std::string to_lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), ::tolower);
     return s;
 }
 
+// 解析 HTTP 方法
 static HttpMethod parse_method(const std::string& m) {
     auto low = to_lower(m);
     if (low == "get")    return HttpMethod::GET;
@@ -20,7 +26,7 @@ static HttpMethod parse_method(const std::string& m) {
     return HttpMethod::UNKNOWN;
 }
 
-// ---- HttpParser impl ----
+// ---- HttpParser 实现 ----
 
 HttpParser::HttpParser(RequestCallback cb)
     : state_(State::kStart)
@@ -106,10 +112,6 @@ void HttpParser::parse_char(char c) {
 
     case State::kQuery: {
         if (c == ' ') {
-            cur_req_->set_path(path_buf_);
-            cur_req_->set_query(query_buf_);
-            state_ = State::kVersionH;
-        } else if (c == ' ') {
             cur_req_->set_path(path_buf_);
             cur_req_->set_query(query_buf_);
             state_ = State::kVersionH;

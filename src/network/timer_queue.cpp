@@ -1,3 +1,6 @@
+// =============================================================================
+// timer_queue.cpp — timerfd 驱动定时器到期与取消逻辑
+// =============================================================================
 #include "timer_queue.h"
 
 #include "channel.h"
@@ -128,6 +131,7 @@ void TimerQueue::handle_read() {
             delete timer;
         }
     }
+    // 回调期间 cancel 的定时器延后在此统一 erase + delete，避免迭代中修改 set
     calling_expired_timers_ = false;
 
     for (Timer* timer : canceling_timers_) {
@@ -199,6 +203,7 @@ void TimerQueue::insert(Timer* timer) {
 std::vector<Timer*> TimerQueue::get_expired(Timestamp when) {
     std::vector<Timer*> expired;
 
+    // sentry 的 second 取最大指针，lower_bound 得到所有 expiration <= when 的条目
     TimerEntry sentry(when, reinterpret_cast<Timer*>(UINTPTR_MAX));
     auto end = timers_.lower_bound(sentry);
     for (auto it = timers_.begin(); it != end;) {

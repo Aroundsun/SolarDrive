@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SolarDrive · 分享下载</title>
+  <link rel="stylesheet" href="/style.css?v=5">
+</head>
+<body>
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <div class="app" id="app">
+    <header class="header">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">☀</div>
+        <div>
+          <h1>分享下载</h1>
+          <p class="subtitle">通过分享链接获取文件</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="/receive.html" class="btn btn-ghost btn-sm">接收分享</a>
+        <a href="/login.html" class="btn btn-ghost btn-sm">登录云盘</a>
+      </div>
+    </header>
+
+    <section class="card auth-card share-page-card" id="share-card">
+      <div id="share-loading" class="share-status">正在检查分享链接…</div>
+      <div id="share-form" hidden>
+        <h2>下载分享文件</h2>
+        <p class="modal-hint" id="share-hint">若分享者设置了密码，请在下方输入</p>
+        <form id="share-download-form">
+          <label class="field">
+            <span>访问密码（无密码可留空）</span>
+            <input type="password" id="share-password" autocomplete="off" placeholder="无密码则直接下载">
+          </label>
+          <button type="submit" class="btn btn-primary btn-block" id="share-download-btn">下载文件</button>
+        </form>
+      </div>
+      <div id="share-error" class="share-status share-error" hidden></div>
+      <div id="share-success" class="share-status share-success" hidden></div>
+    </section>
+  </div>
+
+  <div class="toast-stack" id="toast-stack"></div>
+
+  <script src="/ui.js?v=1"></script>
+  <script src="/api.js?v=1"></script>
+  <script src="/share.js?v=6"></script>
+</body>
+</html>

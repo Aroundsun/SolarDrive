@@ -1,3 +1,8 @@
+// =============================================================================
+// event_loop.cpp — EventLoop 实现
+//
+// 实现 Reactor 主循环、eventfd 跨线程唤醒、以及 pending_tasks_ 任务队列。
+// =============================================================================
 #include "event_loop.h"
 #include "epoll_poller.h"
 #include "channel.h"
@@ -58,19 +63,21 @@ void EventLoop::loop() {
     assert(is_in_loop_thread());
     looping_ = true;
 
-    // 清掉 loop 启动前 stop() 写入 eventfd 的计数，避免空唤醒
+    // loop 启动前若其他线程已 stop()，eventfd 可能已有计数；先 drain 避免无事件空转
     uint64_t one = 0;
     while (::read(wakeup_fd_, &one, sizeof(one)) == static_cast<ssize_t>(sizeof(one))) {
     }
 
-    // 若 stop() 已在 loop() 开始前被调用，直接退出
+    // stop() 与 loop() 竞态：exchange 取走 stop 标志后若已为 true 则不再进入 poll
     if (stop_.exchange(false)) {
         looping_ = false;
         return;
     }
 
+    // Reactor 主循环：epoll_wait → 分发 Channel 回调 → 执行跨线程投递的任务
     while (!stop_) {
         active_channels_.clear();
+        // 将最近定时器到期时间作为 epoll_wait 超时，避免定时器与 I/O 分离轮询
         const int timeout = timer_queue_->get_next_timeout_ms();
         poller_->poll(timeout, &active_channels_);
 
@@ -78,6 +85,7 @@ void EventLoop::loop() {
             channel->handle_event();
         }
 
+        // 在 I/O 回调之后处理 pending 任务，避免任务中修改 Channel 与 epoll 状态冲突
         do_pending_tasks();
     }
 
@@ -105,6 +113,7 @@ void EventLoop::queue_in_loop(Task task) {
         pending_tasks_.push_back(std::move(task));
     }
 
+    // 若从其他线程投递任务，须唤醒 epoll_wait，否则任务可能长时间得不到执行
     if (!is_in_loop_thread()) {
         wakeup();
     }

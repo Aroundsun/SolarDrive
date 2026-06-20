@@ -1,3 +1,7 @@
+// =============================================================================
+// static_handler.cpp — 静态资源服务实现
+// SolarDrive HTTP 层：仅处理 GET 非 /api/ 请求，读取本地文件返回
+// =============================================================================
 #include "static_handler.h"
 
 #include <fstream>
@@ -8,6 +12,7 @@ namespace solar_http {
 StaticHandler::StaticHandler(std::string root_dir)
     : root_dir_(std::move(root_dir))
 {
+    // 统一去掉末尾 /，拼接路径时始终用 root + "/" + rel
     if (!root_dir_.empty() && root_dir_.back() == '/') {
         root_dir_.pop_back();
     }
@@ -47,6 +52,7 @@ bool StaticHandler::is_safe_relative_path(const std::string& rel) {
 }
 
 bool StaticHandler::try_serve(const HttpRequest& req, HttpResponse& resp) const {
+    // 仅处理 GET；API 路由交给 HttpRouter
     if (req.method() != HttpMethod::GET) {
         return false;
     }

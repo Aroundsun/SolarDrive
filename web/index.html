@@ -4,19 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SolarDrive</title>
-  <link rel="stylesheet" href="/style.css?v=3">
+  <link rel="stylesheet" href="/style.css?v=11">
 </head>
 <body>
   <div class="bg-glow bg-glow-a"></div>
   <div class="bg-glow bg-glow-b"></div>
 
-  <div class="app" id="app" data-view="auth">
+  <div class="app" id="app" data-view="app">
     <header class="header">
       <div class="brand">
         <div class="logo" aria-hidden="true">☀</div>
         <div>
           <h1>SolarDrive</h1>
-          <p class="subtitle">内容寻址云盘 · 登录 · 上传 · 秒传</p>
+          <p class="subtitle">内容寻址云盘 · 上传 · 秒传 · 分享</p>
         </div>
       </div>
       <div class="header-actions">
@@ -24,56 +24,33 @@
           <span class="status-dot"></span>
           <span id="status-text">连接中…</span>
         </div>
-        <div class="user-bar" id="user-bar" hidden>
+        <a href="/receive.html" class="btn btn-ghost btn-sm btn-icon" id="receive-link">
+          <span>接收分享</span>
+        </a>
+        <div class="user-bar" id="user-bar">
+          <span class="user-icon" id="user-icon"></span>
           <span class="user-name" id="user-name"></span>
-          <button type="button" class="btn btn-ghost btn-sm" id="logout-btn">退出</button>
+          <button type="button" class="btn btn-ghost btn-sm btn-icon" id="logout-btn">
+            <span>退出</span>
+          </button>
         </div>
       </div>
     </header>
 
-    <!-- 登录 / 注册 -->
-    <section class="card auth-card" id="auth-card">
-      <div class="auth-tabs">
-        <button type="button" class="auth-tab active" data-tab="login">登录</button>
-        <button type="button" class="auth-tab" data-tab="register">注册</button>
-      </div>
-
-      <form class="auth-form" id="login-form">
-        <label class="field">
-          <span>用户名</span>
-          <input type="text" id="login-username" name="username" autocomplete="username" required>
-        </label>
-        <label class="field">
-          <span>密码</span>
-          <input type="password" id="login-password" name="password" autocomplete="current-password" required>
-        </label>
-        <button type="submit" class="btn btn-primary btn-block">登录</button>
-      </form>
-
-      <form class="auth-form" id="register-form" hidden>
-        <label class="field">
-          <span>用户名</span>
-          <input type="text" id="register-username" name="username" autocomplete="username" required>
-        </label>
-        <label class="field">
-          <span>密码</span>
-          <input type="password" id="register-password" name="password" autocomplete="new-password" required>
-        </label>
-        <button type="submit" class="btn btn-primary btn-block">注册并登录</button>
-      </form>
-    </section>
-
-    <!-- 主功能（登录后显示） -->
-    <main class="main" id="main-panel" hidden>
+    <!-- 主功能 -->
+    <main class="main" id="main-panel">
       <section class="card upload-card">
-        <h2>上传文件</h2>
+        <div class="section-head">
+          <h2><span class="section-icon" id="upload-section-icon"></span>上传文件</h2>
+          <p class="section-desc" id="upload-folder-hint">上传到当前目录</p>
+        </div>
         <label class="dropzone" id="dropzone" for="file-input">
           <input type="file" id="file-input" name="files" multiple
                  accept="*/*" aria-label="选择要上传的文件">
           <div class="dropzone-inner">
-            <div class="drop-icon">↑</div>
+            <div class="drop-icon" id="drop-icon"></div>
             <p class="drop-title">拖拽文件到此处，或点击选择</p>
-            <p class="drop-hint">支持多文件 · 相同内容自动秒传</p>
+            <p class="drop-hint">支持多文件 · 相同内容自动秒传 · 大于 4MB 自动分片</p>
           </div>
         </label>
         <div class="upload-queue" id="upload-queue"></div>
@@ -81,11 +58,26 @@
 
       <section class="card files-card">
         <div class="files-head">
-          <h2>我的文件</h2>
-          <button type="button" class="btn btn-ghost" id="refresh-btn">刷新</button>
+          <div class="files-head-left">
+            <h2><span class="section-icon" id="files-section-icon"></span>我的文件</h2>
+            <nav class="breadcrumb" id="folder-breadcrumb" aria-label="文件夹路径"></nav>
+          </div>
+          <div class="files-head-actions">
+            <button type="button" class="btn btn-ghost btn-sm btn-icon" id="new-folder-btn" title="新建文件夹">
+              <span>新建文件夹</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm btn-icon" id="refresh-btn" title="刷新">
+              <span>刷新</span>
+            </button>
+          </div>
+        </div>
+        <div class="panel-loading" id="files-loading" hidden>
+          <div class="spinner"></div>
+          <span>加载中…</span>
         </div>
         <div class="files-empty" id="files-empty" hidden>
-          <p>还没有文件，先上传一个吧</p>
+          <div class="empty-icon" id="files-empty-icon"></div>
+          <p>此文件夹为空，上传文件或新建文件夹吧</p>
         </div>
         <div class="table-wrap">
           <table class="files-table" id="files-table" hidden>
@@ -101,6 +93,36 @@
           </table>
         </div>
       </section>
+
+      <section class="card shares-card">
+        <div class="files-head">
+          <h2><span class="section-icon" id="shares-section-icon"></span>我的分享</h2>
+          <button type="button" class="btn btn-ghost btn-sm btn-icon" id="refresh-shares-btn" title="刷新">
+            <span>刷新</span>
+          </button>
+        </div>
+        <div class="panel-loading" id="shares-loading" hidden>
+          <div class="spinner"></div>
+          <span>加载中…</span>
+        </div>
+        <div class="files-empty" id="shares-empty" hidden>
+          <div class="empty-icon" id="shares-empty-icon"></div>
+          <p>还没有分享链接，在文件列表中点击「分享」生成短链</p>
+        </div>
+        <div class="table-wrap">
+          <table class="files-table" id="shares-table" hidden>
+            <thead>
+              <tr>
+                <th>短链</th>
+                <th>文件 ID</th>
+                <th>下载次数</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="shares-body"></tbody>
+          </table>
+        </div>
+      </section>
     </main>
 
     <footer class="footer">
@@ -112,6 +134,25 @@
 
   <div class="toast-stack" id="toast-stack"></div>
 
-  <script src="/app.js?v=3"></script>
+  <div class="modal-backdrop" id="share-modal" hidden>
+    <div class="modal card" role="dialog" aria-labelledby="share-modal-title">
+      <h3 id="share-modal-title">分享短链已生成</h3>
+      <p class="modal-hint" id="share-modal-hint">复制下方链接发送给他人即可下载</p>
+      <label class="field">
+        <span>分享链接</span>
+        <input type="text" id="share-url-input" readonly>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="share-copy-btn">复制链接</button>
+        <button type="button" class="btn btn-ghost" id="share-close-btn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/session.js?v=2"></script>
+  <script src="/icons.js?v=1"></script>
+  <script src="/ui.js?v=1"></script>
+  <script src="/api.js?v=1"></script>
+  <script src="/app.js?v=13"></script>
 </body>
 </html>
