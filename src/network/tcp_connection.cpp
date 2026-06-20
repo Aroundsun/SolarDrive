@@ -156,11 +156,14 @@ void TcpConnection::connection_destroyed() {
     loop_->assert_in_loop_thread();
 
     State s = state_.load(std::memory_order_acquire);
-    if (s == State::kConnected) {
+    if (s == State::kConnected || s == State::kDisconnecting) {
         state_.store(State::kDisconnected, std::memory_order_release);
         channel_->disable_all();
     }
+
     channel_->remove();
+    context_ = std::any{};
+    socket_.reset();
 }
 
 void TcpConnection::handle_read(int64_t receive_time) {

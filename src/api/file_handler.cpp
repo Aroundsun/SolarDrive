@@ -7,8 +7,12 @@
 
 namespace solar_api {
 
-FileHandler::FileHandler(solar_metadata::FileDao& file_dao)
-    : file_dao_(file_dao) {}
+FileHandler::FileHandler(solar_metadata::FileDao& file_dao,
+                         solar_metadata::ShareDao& share_dao,
+                         solar_metadata::ContentGc& content_gc)
+    : file_dao_(file_dao)
+    , share_dao_(share_dao)
+    , content_gc_(content_gc) {}
 
 void FileHandler::handle_list(const solar_http::HttpRequest& req,
                               solar_http::HttpResponse& resp) {
@@ -54,7 +58,11 @@ void FileHandler::handle_delete(const solar_http::HttpRequest& req,
             return;
         }
 
+        const std::string content_id = file->content_id;
         file_dao_.soft_delete(file_id);
+        share_dao_.revoke_by_file_id(file_id);
+        content_gc_.try_collect_content(content_id);
+
         resp.set_json(R"({"deleted":true})");
     } catch (const std::exception& e) {
         resp.set_error(500, std::string("delete failed: ") + e.what());

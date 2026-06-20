@@ -7,9 +7,8 @@
 #include "../http/http_response.h"
 #include "../storage/object_store.h"
 #include "../metadata/file_dao.h"
-#include "../cache/redis_client.h"
 #include "../metadata/share_dao.h"
-#include <memory>
+#include "../cache/redis_client.h"
 #include <optional>
 
 namespace solar_api {
@@ -18,7 +17,7 @@ namespace solar_api {
 class ShareHandler {
 public:
     ShareHandler(
-        std::shared_ptr<ShareDao> share_dao,
+        solar_metadata::ShareDao& share_dao,
         solar_metadata::FileDao& file_dao,
         solar_storage::ObjectStore& store,
         std::shared_ptr<solar_cache::RedisClient> redis);
@@ -39,7 +38,7 @@ public:
     void handle_save(const solar_http::HttpRequest& req, solar_http::HttpResponse& resp);
 
 private:
-    std::shared_ptr<ShareDao> share_dao_;
+    solar_metadata::ShareDao& share_dao_;
     solar_metadata::FileDao&  file_dao_;
     solar_storage::ObjectStore& store_;
     std::shared_ptr<solar_cache::RedisClient> redis_;
@@ -48,7 +47,7 @@ private:
     std::string generate_token();
 
     // 校验分享有效性（撤销/过期/密码/下载次数），count_download 为 true 时递增计数
-    std::optional<ShareRecord> resolve_share(
+    std::optional<solar_metadata::ShareRecord> resolve_share(
         const std::string& token,
         const std::string& password,
         solar_http::HttpResponse& resp,

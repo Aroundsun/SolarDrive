@@ -41,7 +41,7 @@ std::string path_after_prefix(const std::string& path, const std::string& prefix
 void send_http_error(const solar_net::TcpConnectionPtr& conn, int code, const std::string& msg) {
     solar_http::HttpResponse resp;
     resp.set_error(code, msg);
-    conn->send(resp.serialize());
+    solar_http::send_response_and_close(conn, resp);
 }
 
 std::optional<std::string> authenticate_ws(const solar_http::HttpRequest& req,
@@ -113,7 +113,7 @@ bool try_handle_upgrade(const solar_http::HttpRequest& req,
         solar_http::HttpResponse auth_resp;
         auto user_id = authenticate_ws(req, auth_resp);
         if (!user_id) {
-            conn->send(auth_resp.serialize());
+            solar_http::send_response_and_close(conn, auth_resp);
             return true;
         }
         if (!upload_session_owned_by(redis, upload_id, *user_id)) {

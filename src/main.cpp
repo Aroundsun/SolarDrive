@@ -34,6 +34,9 @@
 #include "metadata/schema.h"
 #include "metadata/file_dao.h"
 #include "metadata/folder_dao.h"
+#include "metadata/content_dao.h"
+#include "metadata/content_gc.h"
+#include "metadata/share_dao.h"
 #include "api/download_handler.h"
 #include "api/file_handler.h"
 #include "api/route_registry.h"
@@ -54,6 +57,13 @@
 #include <pqxx/except>
 
 namespace {
+
+constexpr int kMaxKeepAliveRequests = 1000;
+
+struct HttpConnContext {
+    std::shared_ptr<solar_http::HttpParser> parser;
+    int request_count = 0;
+};
 
 // 检查 Web 根目录下是否存在 index.html
 bool web_root_has_index(const std::string& root) {
@@ -312,8 +322,11 @@ int main(int argc, char* argv[]) {
         std::_Exit(1);
     }
 
-    solar_metadata::FileDao file_dao(*db_pool);
+    solar_metadata::ContentDao content_dao(*db_pool);
+    solar_metadata::FileDao file_dao(*db_pool, content_dao);
     solar_metadata::FolderDao folder_dao(*db_pool);
+    solar_metadata::ShareDao share_dao(*db_pool);
+    solar_metadata::ContentGc content_gc(content_dao, *db_pool, store);
 
     // ---- 3. Redis 缓存与 JWT ----
     auto redis = std::make_shared<solar_cache::RedisClient>(
@@ -335,10 +348,9 @@ int main(int argc, char* argv[]) {
         store, file_dao, folder_dao, redis,
         cfg.storage.chunk_size, cfg.limits.max_file_size_bytes());
 
-    auto share_dao = std::make_shared<solar_api::ShareDao>(*db_pool);
     solar_api::ShareHandler share_handler(share_dao, file_dao, store, redis);
     solar_api::FolderHandler folder_handler(folder_dao, file_dao);
-    solar_api::FileHandler file_handler(file_dao);
+    solar_api::FileHandler file_handler(file_dao, share_dao, content_gc);
 
     const solar_api::AppServices services{
         cfg,
@@ -379,20 +391,29 @@ int main(int argc, char* argv[]) {
                 solar_monitor::Metrics::inc_active_connections();
                 SNLOG_DEBUG("new connection: {}", conn->name());
 
-                auto parser = std::make_shared<solar_http::HttpParser>(
-                    [conn, router, static_handler, redis](solar_http::HttpRequest& req) {
+                std::weak_ptr<solar_net::TcpConnection> weak_conn = conn;
+                auto hs = std::make_shared<HttpConnContext>();
+                hs->parser = std::make_shared<solar_http::HttpParser>(
+                    [weak_conn, hs, router, static_handler, redis](solar_http::HttpRequest& req) {
+                        auto conn = weak_conn.lock();
+                        if (!conn) {
+                            return;
+                        }
                         // WebSocket Upgrade 优先处理（/ws/metrics、/ws/upload/{id}）
                         if (solar_ws::try_handle_upgrade(req, conn, redis)) {
                             return;
                         }
 
                         solar_http::HttpResponse resp;
+                        const bool keep_alive = req.wants_keep_alive() &&
+                                                hs->request_count < kMaxKeepAliveRequests;
+                        hs->request_count++;
 
                         // GET 优先尝试静态资源（Web UI、share.html 等）
                         if (req.method() == solar_http::HttpMethod::GET &&
                             static_handler->try_serve(req, resp)) {
                             record_response_metrics(resp);
-                            conn->send(resp.serialize());
+                            solar_http::send_response(conn, resp, keep_alive);
                             return;
                         }
 
@@ -402,7 +423,7 @@ int main(int argc, char* argv[]) {
                             if (!auth_result.authenticated) {
                                 resp.set_error(401, auth_result.error_msg);
                                 record_response_metrics(resp);
-                                conn->send(resp.serialize());
+                                solar_http::send_response(conn, resp, keep_alive);
                                 return;
                             }
                             req.set_auth_user(auth_result.user_id, auth_result.username);
@@ -410,10 +431,10 @@ int main(int argc, char* argv[]) {
 
                         router->dispatch(req, resp);
                         record_response_metrics(resp);
-                        conn->send(resp.serialize());
+                        solar_http::send_response(conn, resp, keep_alive);
                     }
                 );
-                conn->set_context(parser);
+                conn->set_context(hs);
             } else if (conn->state() == solar_net::TcpConnection::State::kDisconnected) {
                 solar_monitor::Metrics::dec_active_connections();
                 solar_ws::WsSessionManager::instance().remove_session(conn);
@@ -441,8 +462,8 @@ int main(int argc, char* argv[]) {
                 return;
             }
 
-            auto parser = std::any_cast<std::shared_ptr<solar_http::HttpParser>>(ctx);
-            const size_t consumed = parser->feed(
+            auto hs = std::any_cast<std::shared_ptr<HttpConnContext>>(ctx);
+            const size_t consumed = hs->parser->feed(
                 reinterpret_cast<const char*>(buf->data()), readable);
             buf->retrieve(consumed);
         }
@@ -451,6 +472,15 @@ int main(int argc, char* argv[]) {
     // 每 5 秒向 /ws/metrics 订阅者推送指标（替代前端轮询）
     main_loop.run_every(5.0, []() {
         solar_ws::WsSessionManager::instance().broadcast_metrics();
+    });
+
+    // 每小时：撤销过期分享 + 回收孤儿 content 与磁盘块
+    main_loop.run_every(3600.0, [&share_dao, &content_gc]() {
+        const int expired = share_dao.revoke_expired();
+        if (expired > 0) {
+            SNLOG_INFO("revoked {} expired share(s)", expired);
+        }
+        content_gc.collect_orphans(200);
     });
 
     std::signal(SIGINT,  signal_handler);

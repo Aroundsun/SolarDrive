@@ -37,6 +37,9 @@ public:
     /// 按 chunk hash 顺序拼接还原完整文件内容
     std::string get_chunked(const std::vector<std::string>& hashes) const;
 
+    /// 删除对象文件（不存在视为成功）
+    bool remove(const std::string& hash);
+
     // 计算 SHA-256
     static std::string sha256(const std::string& data);
 
