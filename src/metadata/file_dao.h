@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "db_pool.h"
+#include "content_dao.h"
 
 namespace solar_metadata {
 
@@ -27,7 +28,7 @@ struct FileRecord {
 
 class FileDao {
 public:
-    explicit FileDao(DbPool& pool);
+    explicit FileDao(DbPool& pool, ContentDao& content_dao);
 
     void create_table();
 
@@ -63,7 +64,8 @@ public:
 private:
     static void require_owner_id(const FileRecord& file);
 
-    DbPool& pool_;
+    DbPool&      pool_;
+    ContentDao&  content_dao_;
 };
 
 } // namespace solar_metadata

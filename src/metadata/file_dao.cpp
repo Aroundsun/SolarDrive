@@ -15,10 +15,6 @@ constexpr const char* kFileSelect =
     "FROM files f "
     "JOIN content_objects c ON c.id = f.content_id ";
 
-constexpr const char* kContentSelect =
-    "SELECT id::text, size, hash, chunk_hashes::text, mime_type "
-    "FROM content_objects ";
-
 FileRecord row_to_record(const pqxx::row& row) {
     FileRecord rec;
     rec.id           = row[0].as<std::string>();
@@ -38,52 +34,20 @@ FileRecord row_to_record(const pqxx::row& row) {
     return rec;
 }
 
-FileRecord content_row_to_record(const pqxx::row& row) {
-    FileRecord rec;
-    rec.content_id   = row[0].as<std::string>();
-    rec.id           = rec.content_id;
-    rec.size         = row[1].as<int64_t>();
-    rec.hash         = row[2].as<std::string>();
-    rec.chunk_hashes = row[3].as<std::string>();
-    rec.mime_type    = row[4].as<std::string>();
-    return rec;
-}
-
-std::string ensure_content(pqxx::work& txn, const FileRecord& file) {
-    auto existing = txn.exec_params(
-        "SELECT id::text FROM content_objects WHERE hash = $1",
-        file.hash
-    );
-    if (!existing.empty()) {
-        return existing[0][0].as<std::string>();
-    }
-
-    auto inserted = txn.exec_params(
-        "INSERT INTO content_objects (hash, size, chunk_hashes, mime_type) "
-        "VALUES ($1, $2, $3, $4) "
-        "ON CONFLICT (hash) DO NOTHING RETURNING id::text",
-        file.hash,
-        file.size,
-        file.chunk_hashes,
-        file.mime_type
-    );
-    if (!inserted.empty()) {
-        return inserted[0][0].as<std::string>();
-    }
-
-    auto raced = txn.exec_params(
-        "SELECT id::text FROM content_objects WHERE hash = $1",
-        file.hash
-    );
-    if (raced.empty()) {
-        throw std::runtime_error("failed to resolve content object for hash");
-    }
-    return raced[0][0].as<std::string>();
+ContentRecord file_to_content(const FileRecord& file) {
+    ContentRecord content;
+    content.hash         = file.hash;
+    content.size         = file.size;
+    content.chunk_hashes = file.chunk_hashes;
+    content.mime_type    = file.mime_type;
+    return content;
 }
 
 } // namespace
 
-FileDao::FileDao(DbPool& pool) : pool_(pool) {}
+FileDao::FileDao(DbPool& pool, ContentDao& content_dao)
+    : pool_(pool)
+    , content_dao_(content_dao) {}
 
 void FileDao::require_owner_id(const FileRecord& file) {
     if (file.owner_id.empty()) {
@@ -101,7 +65,7 @@ std::string FileDao::insert(const FileRecord& file) {
     auto guard = pool_.acquire();
     pqxx::work txn(*guard);
 
-    const std::string content_id = ensure_content(txn, file);
+    const std::string content_id = content_dao_.ensure_in_txn(txn, file_to_content(file));
 
     pqxx::row row = file.folder_id.empty()
         ? txn.exec_params1(
@@ -184,17 +148,18 @@ std::optional<FileRecord> FileDao::find_owned_by_id(const std::string& owner_id,
 }
 
 std::optional<FileRecord> FileDao::find_content_by_hash(const std::string& hash) {
-    auto guard = pool_.acquire();
-    pqxx::work txn(*guard);
-
-    auto result = txn.exec_params(
-        std::string(kContentSelect) + "WHERE hash = $1",
-        hash
-    );
-    if (result.empty()) {
+    auto content = content_dao_.find_by_hash(hash);
+    if (!content) {
         return std::nullopt;
     }
-    return content_row_to_record(result[0]);
+    FileRecord rec;
+    rec.content_id   = content->id;
+    rec.id           = content->id;
+    rec.size         = content->size;
+    rec.hash         = content->hash;
+    rec.chunk_hashes = content->chunk_hashes;
+    rec.mime_type    = content->mime_type;
+    return rec;
 }
 
 void FileDao::soft_delete(const std::string& id) {

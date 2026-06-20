@@ -1,12 +1,10 @@
-// =============================================================================
-// share_dao.cpp — 文件分享数据访问层实现
-// =============================================================================
 #include "share_dao.h"
+
 #include <pqxx/pqxx>
 
-namespace solar_api {
+namespace solar_metadata {
 
-ShareDao::ShareDao(solar_metadata::DbPool& pool) : pool_(pool) {}
+ShareDao::ShareDao(DbPool& pool) : pool_(pool) {}
 
 void ShareDao::create_table() {
     // Schema 由 bootstrap_schema() 统一管理
@@ -69,7 +67,9 @@ std::optional<ShareRecord> ShareDao::find_by_token(const std::string& token) {
     return s;
 }
 
-std::vector<ShareRecord> ShareDao::list_by_owner(const std::string& owner_id, int limit, int offset) {
+std::vector<ShareRecord> ShareDao::list_by_owner(const std::string& owner_id,
+                                                  int limit,
+                                                  int offset) {
     auto g = pool_.acquire();
     pqxx::work tx(*g);
     auto r = tx.exec_params(
@@ -117,6 +117,28 @@ void ShareDao::revoke(const std::string& id, const std::string& owner_id) {
     tx.commit();
 }
 
+void ShareDao::revoke_by_file_id(const std::string& file_id) {
+    auto g = pool_.acquire();
+    pqxx::work tx(*g);
+    tx.exec_params(
+        "UPDATE file_shares SET is_revoked = TRUE "
+        "WHERE file_id = $1 AND is_revoked = FALSE",
+        file_id
+    );
+    tx.commit();
+}
+
+int ShareDao::revoke_expired() {
+    auto g = pool_.acquire();
+    pqxx::work tx(*g);
+    auto result = tx.exec(
+        "UPDATE file_shares SET is_revoked = TRUE "
+        "WHERE is_revoked = FALSE AND expires_at IS NOT NULL AND expires_at < NOW()"
+    );
+    tx.commit();
+    return result.affected_rows();
+}
+
 bool ShareDao::token_exists(const std::string& token) {
     auto g = pool_.acquire();
     pqxx::work tx(*g);
@@ -124,4 +146,4 @@ bool ShareDao::token_exists(const std::string& token) {
     return !r.empty();
 }
 
-} // namespace solar_api
+} // namespace solar_metadata

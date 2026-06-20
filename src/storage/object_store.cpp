@@ -12,7 +12,9 @@
 #include <sstream>
 #include <iomanip>
 #include <cstring>
+#include <cerrno>
 #include <stdexcept>
+#include <unistd.h>
 
 namespace solar_storage {
 
@@ -140,6 +142,21 @@ bool ObjectStore::exists(const std::string& hash) const
     std::string path = hash_to_path(hash);
     struct stat st;
     return ::stat(path.c_str(), &st) == 0;
+}
+
+bool ObjectStore::remove(const std::string& hash)
+{
+    if (hash.empty()) {
+        return false;
+    }
+    const std::string path = hash_to_path(hash);
+    if (::unlink(path.c_str()) == 0) {
+        return true;
+    }
+    if (errno == ENOENT) {
+        return false;
+    }
+    throw std::runtime_error("cannot remove object: " + hash);
 }
 
 std::vector<std::string> ObjectStore::put_chunked(const std::string& data)

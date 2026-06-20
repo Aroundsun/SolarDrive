@@ -7,6 +7,8 @@
 #include <string>
 #include <unordered_map>
 #include <cstdint>
+#include <algorithm>
+#include <cctype>
 
 namespace solar_http {
 
@@ -55,6 +57,23 @@ public:
         auto it = headers_.find(key);
         return it != headers_.end() ? it->second : "";
     }
+
+    /// 按 key 取 header（大小写不敏感）
+    std::string get_header_ic(const std::string& key) const {
+        for (const auto& [k, v] : headers_) {
+            if (k.size() == key.size() &&
+                std::equal(k.begin(), k.end(), key.begin(),
+                           [](unsigned char a, unsigned char b) {
+                               return std::tolower(a) == std::tolower(b);
+                           })) {
+                return v;
+            }
+        }
+        return "";
+    }
+
+    /// 客户端是否期望持久连接（HTTP/1.1 默认 keep-alive，除非 Connection: close）
+    bool wants_keep_alive() const;
 
     /// 从 Content-Length 头解析 body 长度
     size_t content_length() const {

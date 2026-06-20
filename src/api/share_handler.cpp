@@ -49,11 +49,11 @@ bool wants_share_page_redirect(const solar_http::HttpRequest& req) {
 } // namespace
 
 ShareHandler::ShareHandler(
-    std::shared_ptr<ShareDao> share_dao,
+    solar_metadata::ShareDao& share_dao,
     solar_metadata::FileDao& file_dao,
     solar_storage::ObjectStore& store,
     std::shared_ptr<solar_cache::RedisClient> redis)
-    : share_dao_(std::move(share_dao))
+    : share_dao_(share_dao)
     , file_dao_(file_dao)
     , store_(store)
     , redis_(std::move(redis)) {}
@@ -67,7 +67,7 @@ std::string ShareHandler::generate_token() {
     for (int attempt = 0; attempt < 10; attempt++) {
         std::string token(8, ' ');
         for (auto& c : token) c = chars[dist(rng)];
-        if (!share_dao_->token_exists(token))
+        if (!share_dao_.token_exists(token))
             return token;
     }
     // 极端情况：10 次都冲突（概率极低），抛异常
@@ -75,7 +75,7 @@ std::string ShareHandler::generate_token() {
 }
 
 // 分享访问统一校验入口：查库 → 检查撤销/过期/密码/下载上限 → 可选递增计数
-std::optional<ShareRecord> ShareHandler::resolve_share(
+std::optional<solar_metadata::ShareRecord> ShareHandler::resolve_share(
     const std::string& token,
     const std::string& password,
     solar_http::HttpResponse& resp,
@@ -85,7 +85,7 @@ std::optional<ShareRecord> ShareHandler::resolve_share(
         return std::nullopt;
     }
 
-    auto share = share_dao_->find_by_token(token);
+    auto share = share_dao_.find_by_token(token);
     if (!share) {
         resp.set_error(404, "share not found");
         return std::nullopt;
@@ -138,7 +138,7 @@ std::optional<ShareRecord> ShareHandler::resolve_share(
 
     // 实际下载时递增 DB 计数，并同步更新 Redis 缓存中的 download_count
     if (count_download) {
-        share_dao_->increment_download_count(share->id);
+        share_dao_.increment_download_count(share->id);
 
         if (redis_) {
             auto cached = redis_->get("share:" + token);
@@ -182,7 +182,7 @@ void ShareHandler::handle_create(const solar_http::HttpRequest& req, solar_http:
         std::string token = generate_token();
 
         // 构建记录
-        ShareRecord record;
+        solar_metadata::ShareRecord record;
         record.file_id     = file_id;
         record.owner_id    = user_id;
         record.share_token = token;
@@ -217,7 +217,7 @@ void ShareHandler::handle_create(const solar_http::HttpRequest& req, solar_http:
             record.expires_at = iso.str();
         }
 
-        share_dao_->insert(record);
+        share_dao_.insert(record);
 
         // 写入 Redis 缓存
         if (redis_) {
@@ -256,7 +256,7 @@ void ShareHandler::handle_list(const solar_http::HttpRequest& req, solar_http::H
             return;
         }
 
-        auto shares = share_dao_->list_by_owner(req.auth_user_id());
+        auto shares = share_dao_.list_by_owner(req.auth_user_id());
 
         json arr = json::array();
         for (auto& s : shares) {
@@ -293,7 +293,7 @@ void ShareHandler::handle_revoke(const solar_http::HttpRequest& req, solar_http:
             return;
         }
 
-        auto share = share_dao_->find_by_token(token);
+        auto share = share_dao_.find_by_token(token);
         if (!share) {
             resp.set_error(404, "share not found");
             return;
@@ -303,7 +303,7 @@ void ShareHandler::handle_revoke(const solar_http::HttpRequest& req, solar_http:
             return;
         }
 
-        share_dao_->revoke(share->id, req.auth_user_id());
+        share_dao_.revoke(share->id, req.auth_user_id());
 
         // 删 Redis 缓存
         if (redis_) redis_->del("share:" + token);
