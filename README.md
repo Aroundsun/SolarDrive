@@ -129,6 +129,26 @@ docker compose down        # 停止容器
 docker compose down -v     # 停止并清除数据卷（慎用）
 ```
 
+**一键 Demo + API 冒烟测试：**
+
+```bash
+chmod +x scripts/demo.sh scripts/smoke_test.sh
+./scripts/demo.sh
+```
+
+`demo.sh` 会 `docker compose up -d --build` 并等待健康检查后，自动执行 `scripts/smoke_test.sh`（register → login → upload → list → share → delete 等 11 步）。
+
+服务已在运行时，可跳过 compose 启动：
+
+```bash
+SKIP_COMPOSE=1 ./scripts/demo.sh
+# 或指定地址
+BASE_URL=http://127.0.0.1:8080 ./scripts/smoke_test.sh
+```
+
+> 若 upload 返回 401，多为容器镜像是 JWT 修复前的旧版本，请执行 `docker compose up -d --build` 重建。  
+> 若 delete 步骤超时或 500，参见 [Content GC 删除修复说明](docs/bugfix-content-gc-delete-2026-06-21.md)。
+
 Docker 环境使用 `config/config.yaml`，数据库主机为 compose 服务名 `postgres`，Redis 为 `redis`。
 
 ---

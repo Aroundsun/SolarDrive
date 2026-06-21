@@ -48,6 +48,18 @@ GcStats ContentGc::purge_content(const ContentRecord& content) {
 
     auto guard = pool_.acquire();
     pqxx::work txn(*guard);
+    // 软删除的 files 行仍持有 content_id 外键，需先清理 tombstone 及关联分享
+    txn.exec_params(
+        "DELETE FROM file_shares "
+        "WHERE file_id IN ("
+        "  SELECT id FROM files WHERE content_id = $1 AND deleted_at IS NOT NULL"
+        ")",
+        content.id
+    );
+    txn.exec_params(
+        "DELETE FROM files WHERE content_id = $1 AND deleted_at IS NOT NULL",
+        content.id
+    );
     if (!content_dao_.delete_by_id_in_txn(txn, content.id)) {
         return stats;
     }

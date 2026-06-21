@@ -1,9 +1,52 @@
-[2026-06-20 16:23:23.137] [info] [272723] config loaded from config/config.local.yaml
-[2026-06-20 16:23:23.137] [info] [272723] listening port: 18080
-[2026-06-20 16:23:23.137] [info] [272723] worker threads: 4
-[2026-06-20 16:23:23.137] [info] [272723] storage path: /tmp/solardrive/objects
-[2026-06-20 16:23:23.137] [info] [272723] database: 127.0.0.1:5432/solardrive
-[2026-06-20 16:23:23.137] [info] [272723] redis: 127.0.0.1:6379
-[2026-06-20 16:23:23.137] [info] [272723] web root: web
-[2026-06-20 16:23:23.165] [critical] [272723] cannot connect to PostgreSQL: connection to server at "127.0.0.1", port 5432 failed: FATAL:  password authentication failed for user "postgres"
-
+[2026-06-21 17:15:11.246] [info] [1058808] config loaded from config/config.local.yaml
+[2026-06-21 17:15:11.247] [info] [1058808] listening port: 8081
+[2026-06-21 17:15:11.247] [info] [1058808] worker threads: 4
+[2026-06-21 17:15:11.247] [info] [1058808] storage path: /tmp/solardrive/objects
+[2026-06-21 17:15:11.247] [info] [1058808] chunk_size: 4194304 bytes
+[2026-06-21 17:15:11.247] [info] [1058808] max_file_size: 10240 MB
+[2026-06-21 17:15:11.247] [info] [1058808] jwt ttl: 168 hours
+[2026-06-21 17:15:11.247] [info] [1058808] database: 127.0.0.1:5432/solardrive
+[2026-06-21 17:15:11.247] [info] [1058808] redis: 127.0.0.1:6379
+[2026-06-21 17:15:11.247] [info] [1058808] web root: web
+[2026-06-21 17:15:11.417] [info] [1058808] database schema ready (v2)
+[2026-06-21 17:15:11.420] [info] [1058808] Redis connected
+[2026-06-21 17:15:11.420] [info] [1058808] SolarDrive started
+[2026-06-21 17:15:11.420] [info] [1058808] web UI (VM local):     http://127.0.0.1:8081/
+[2026-06-21 17:15:11.420] [info] [1058808] metrics UI (VM local): http://127.0.0.1:8081/metrics.html
+[2026-06-21 17:15:11.420] [info] [1058808] metrics API (VM local): http://127.0.0.1:8081/metrics
+[2026-06-21 17:15:11.422] [info] [1058808] web UI (LAN/host):     http://192.168.192.129:8081/
+[2026-06-21 17:15:11.422] [info] [1058808] metrics UI (LAN/host): http://192.168.192.129:8081/metrics.html
+[2026-06-21 17:15:11.422] [info] [1058808] metrics API (LAN/host): http://192.168.192.129:8081/metrics
+[2026-06-21 17:15:11.422] [info] [1058808] web UI (LAN/host):     http://172.17.0.1:8081/
+[2026-06-21 17:15:11.422] [info] [1058808] metrics UI (LAN/host): http://172.17.0.1:8081/metrics.html
+[2026-06-21 17:15:11.422] [info] [1058808] metrics API (LAN/host): http://172.17.0.1:8081/metrics
+[2026-06-21 17:15:11.422] [info] [1058808] web UI (LAN/host):     http://172.18.0.1:8081/
+[2026-06-21 17:15:11.422] [info] [1058808] metrics UI (LAN/host): http://172.18.0.1:8081/metrics.html
+[2026-06-21 17:15:11.422] [info] [1058808] metrics API (LAN/host): http://172.18.0.1:8081/metrics
+[2026-06-21 17:15:11.423] [info] [1058808] EventLoopThreadPool: started with 4 IO thread(s)
+[2026-06-21 17:15:14.260] [debug] [1058819] new connection: SolarDrive-1#127.0.0.1:34072
+[2026-06-21 17:15:14.260] [debug] [1058819] connection closed: SolarDrive-1#127.0.0.1:34072
+[2026-06-21 17:15:14.359] [debug] [1058820] new connection: SolarDrive-2#127.0.0.1:34082
+[2026-06-21 17:15:14.359] [debug] [1058820] connection closed: SolarDrive-2#127.0.0.1:34082
+[2026-06-21 17:15:14.461] [debug] [1058821] new connection: SolarDrive-3#127.0.0.1:34086
+[2026-06-21 17:15:14.470] [debug] [1058821] connection closed: SolarDrive-3#127.0.0.1:34086
+[2026-06-21 17:15:14.575] [debug] [1058822] new connection: SolarDrive-4#127.0.0.1:34092
+[2026-06-21 17:15:14.583] [debug] [1058822] connection closed: SolarDrive-4#127.0.0.1:34092
+[2026-06-21 17:15:14.679] [debug] [1058819] new connection: SolarDrive-5#127.0.0.1:34094
+[2026-06-21 17:15:14.713] [debug] [1058819] connection closed: SolarDrive-5#127.0.0.1:34094
+[2026-06-21 17:15:14.814] [debug] [1058820] new connection: SolarDrive-6#127.0.0.1:34100
+[2026-06-21 17:15:14.831] [debug] [1058820] connection closed: SolarDrive-6#127.0.0.1:34100
+[2026-06-21 17:15:14.917] [debug] [1058821] new connection: SolarDrive-7#127.0.0.1:34102
+[2026-06-21 17:15:14.933] [debug] [1058821] connection closed: SolarDrive-7#127.0.0.1:34102
+[2026-06-21 17:15:14.972] [debug] [1058822] new connection: SolarDrive-8#127.0.0.1:34112
+[2026-06-21 17:15:15.008] [debug] [1058822] connection closed: SolarDrive-8#127.0.0.1:34112
+[2026-06-21 17:15:15.119] [debug] [1058819] new connection: SolarDrive-9#127.0.0.1:34120
+[2026-06-21 17:15:15.129] [debug] [1058819] connection closed: SolarDrive-9#127.0.0.1:34120
+[2026-06-21 17:15:15.218] [debug] [1058820] new connection: SolarDrive-10#127.0.0.1:34132
+[2026-06-21 17:15:15.243] [debug] [1058820] connection closed: SolarDrive-10#127.0.0.1:34132
+[2026-06-21 17:15:15.284] [debug] [1058821] new connection: SolarDrive-11#127.0.0.1:34138
+[2026-06-21 17:15:15.301] [debug] [1058821] connection closed: SolarDrive-11#127.0.0.1:34138
+[2026-06-21 17:15:15.399] [debug] [1058822] new connection: SolarDrive-12#127.0.0.1:34152
+[2026-06-21 17:15:15.440] [debug] [1058822] connection closed: SolarDrive-12#127.0.0.1:34152
+[2026-06-21 17:15:24.672] [info] [1058808] received shutdown signal
+[2026-06-21 17:15:24.674] [info] [1058808] SolarDrive stopped
