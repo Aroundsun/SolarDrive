@@ -156,8 +156,18 @@ sudo -u postgres psql -c "CREATE DATABASE solardrive;"
 #### 编译
 
 ```bash
-cmake -S . -B build
+cmake -S . -B build -DSOLAR_BUILD_TESTS=ON
 cmake --build build -j$(nproc)
+```
+
+#### 单元测试
+
+网络层 GTest 位于 `test/net_test/`，默认开启（`-DSOLAR_BUILD_TESTS=OFF` 可关闭）：
+
+```bash
+cd build && ctest --output-on-failure
+# 或直接运行
+./test/net_test
 ```
 
 #### 配置
@@ -378,6 +388,8 @@ SolarDrive/
 │   ├── storage/                  # 对象存储（SHA-256 寻址）
 │   ├── metadata/                 # PostgreSQL 连接池 + 文件 DAO
 │   └── api/                      # 上传/下载/认证/断点续传/分享 Handler
+├── test/
+│   └── net_test/                 # 网络层 GTest（ctest net_test）
 ├── web/                          # 前端静态资源
 │   ├── index.html                # 云盘 Web UI
 │   ├── metrics.html              # 监控面板
