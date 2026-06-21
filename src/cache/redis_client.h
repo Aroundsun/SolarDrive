@@ -22,6 +22,8 @@ public:
     RedisClient(const RedisClient&) = delete;
     RedisClient& operator=(const RedisClient&) = delete;
 
+    bool connected() const { return ctx_ != nullptr; }
+
     // 连通性测试（PING -> PONG）
     bool ping();
 
@@ -42,6 +44,13 @@ public:
 
     // 限流计数器：INCR 自增，首次创建时设置 TTL，返回当前计数值（失败返回 -1）
     int64_t incr(const std::string& key, int ttl_seconds);
+
+    // 滑动窗口限流（ZSET + Lua）：窗口内未超限则记录本次请求并返回 true
+    bool sliding_window_allow(const std::string& key,
+                              int64_t now_ms,
+                              int64_t window_ms,
+                              int limit,
+                              const std::string& member);
 
     // 主动断开 Redis 连接
     void disconnect();

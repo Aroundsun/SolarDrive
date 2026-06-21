@@ -114,3 +114,12 @@ solar_add_gtest_suite(ws_test
     SOURCES ${CMAKE_SOURCE_DIR}/src/ws/websocket.cpp
     TEST_GLOB ${CMAKE_CURRENT_SOURCE_DIR}/ws_test/test_*.cpp
 )
+
+solar_add_gtest_suite(cache_test
+    SOURCES
+        ${CMAKE_SOURCE_DIR}/src/cache/redis_client.cpp
+        ${CMAKE_SOURCE_DIR}/src/cache/rate_limiter.cpp
+    TEST_GLOB ${CMAKE_CURRENT_SOURCE_DIR}/cache_test/test_*.cpp
+    LINK_LIBS ${HIREDIS_LIBRARIES}
+    INCLUDE_DIRS ${HIREDIS_INCLUDE_DIRS}
+)

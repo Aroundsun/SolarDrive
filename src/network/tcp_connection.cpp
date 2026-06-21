@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <cstring>
 
 namespace solar_net {
@@ -36,6 +37,14 @@ TcpConnection::~TcpConnection() = default;
 
 int TcpConnection::fd() const {
     return socket_ ? socket_->fd() : -1;
+}
+
+std::string TcpConnection::peer_ip() const {
+    char buf[INET_ADDRSTRLEN] = {};
+    if (::inet_ntop(AF_INET, &peer_addr_.sin_addr, buf, sizeof(buf)) == nullptr) {
+        return {};
+    }
+    return std::string(buf);
 }
 
 bool TcpConnection::is_connected() const {

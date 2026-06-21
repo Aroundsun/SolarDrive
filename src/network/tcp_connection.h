@@ -65,6 +65,9 @@ public:
     State state() const { return state_.load(std::memory_order_acquire); }
     int fd() const;
 
+    /// 对端 IPv4 地址（点分十进制）
+    std::string peer_ip() const;
+
     /// 线程安全：跨线程时拷贝数据并 run_in_loop 到 IO 线程发送
     void send(const void* data, std::size_t len);
     void send(const std::string& message);

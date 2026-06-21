@@ -48,6 +48,7 @@
 #include "auth/auth_middleware.h"
 #include "auth/user_dao.h"
 #include "cache/redis_client.h"
+#include "cache/rate_limiter.h"
 #include "config/config.h"
 #include "monitor/metrics.h"
 #include "ws/ws_upgrade.h"
@@ -337,6 +338,12 @@ int main(int argc, char* argv[]) {
         SNLOG_WARN("Redis not available, continuing without cache");
     }
 
+    solar_cache::RateLimiter rate_limiter(redis, cfg.limits.rate_limit_per_ip);
+    if (cfg.limits.rate_limit_per_ip > 0) {
+        SNLOG_INFO("rate limit enabled: {} requests/min per IP (Redis sliding window)",
+                   cfg.limits.rate_limit_per_ip);
+    }
+
     solar_auth::JwtUtil::set_secret(cfg.jwt.secret);
 
     auto user_dao = std::make_shared<solar_auth::UserDao>(*db_pool);
@@ -386,7 +393,8 @@ int main(int argc, char* argv[]) {
 
     // ---- 7. 连接回调：HTTP 解析 或 WebSocket 升级后的 WsHandler ----
     server.set_connection_callback(
-        [router, static_handler, redis = services.redis](const solar_net::TcpConnectionPtr& conn) {
+        [router, static_handler, redis = services.redis, rate_limiter = &rate_limiter](
+            const solar_net::TcpConnectionPtr& conn) {
             if (conn->state() == solar_net::TcpConnection::State::kConnected) {
                 solar_monitor::Metrics::inc_active_connections();
                 SNLOG_DEBUG("new connection: {}", conn->name());
@@ -394,7 +402,8 @@ int main(int argc, char* argv[]) {
                 std::weak_ptr<solar_net::TcpConnection> weak_conn = conn;
                 auto hs = std::make_shared<HttpConnContext>();
                 hs->parser = std::make_shared<solar_http::HttpParser>(
-                    [weak_conn, hs, router, static_handler, redis](solar_http::HttpRequest& req) {
+                    [weak_conn, hs, router, static_handler, redis, rate_limiter](
+                        solar_http::HttpRequest& req) {
                         auto conn = weak_conn.lock();
                         if (!conn) {
                             return;
@@ -415,6 +424,21 @@ int main(int argc, char* argv[]) {
                             record_response_metrics(resp);
                             solar_http::send_response(conn, resp, keep_alive);
                             return;
+                        }
+
+                        // per-IP 滑动窗口限流（API / 分享 / metrics 等；静态资源豁免）
+                        if (!solar_cache::RateLimiter::is_exempt(req.path())) {
+                            const std::string client_ip = solar_cache::RateLimiter::resolve_client_ip(
+                                req.get_header_ic("X-Forwarded-For"), conn->peer_ip());
+                            if (!rate_limiter->allow(client_ip)) {
+                                resp.set_status(429, "Too Many Requests");
+                                resp.set_header("Retry-After",
+                                                std::to_string(solar_cache::RateLimiter::kWindowSeconds));
+                                resp.set_json(R"({"error":"Too many requests"})");
+                                record_response_metrics(resp);
+                                solar_http::send_response(conn, resp, keep_alive);
+                                return;
+                            }
                         }
 
                         // 非白名单 API 需 JWT 鉴权，结果写入 req 供 Handler 只读

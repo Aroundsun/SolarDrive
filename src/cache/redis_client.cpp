@@ -152,4 +152,42 @@ int64_t RedisClient::incr(const std::string& key, int ttl_seconds) {
     return val;
 }
 
+bool RedisClient::sliding_window_allow(const std::string& key,
+                                       int64_t now_ms,
+                                       int64_t window_ms,
+                                       int limit,
+                                       const std::string& member) {
+    if (!ctx_ || limit <= 0 || window_ms <= 0 || key.empty() || member.empty()) {
+        return true;
+    }
+
+    static const char* kScript =
+        "local window_start = tonumber(ARGV[1]) - tonumber(ARGV[2]) "
+        "redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', window_start) "
+        "local count = redis.call('ZCARD', KEYS[1]) "
+        "if count >= tonumber(ARGV[3]) then return 0 end "
+        "redis.call('ZADD', KEYS[1], tonumber(ARGV[1]), ARGV[4]) "
+        "redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2])) "
+        "return 1";
+
+    redisReply* reply = static_cast<redisReply*>(redisCommand(
+        ctx_,
+        "EVAL %s 1 %s %lld %lld %d %s",
+        kScript,
+        key.c_str(),
+        static_cast<long long>(now_ms),
+        static_cast<long long>(window_ms),
+        limit,
+        member.c_str()));
+
+    bool allowed = false;
+    if (reply && reply->type == REDIS_REPLY_INTEGER) {
+        allowed = (reply->integer == 1);
+    }
+    if (reply) {
+        freeReplyObject(reply);
+    }
+    return allowed;
+}
+
 } // namespace solar_cache
