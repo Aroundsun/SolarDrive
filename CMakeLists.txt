@@ -93,6 +93,13 @@ target_compile_options(solardrive PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-std=c++17>
 )
 
+# ---- 单元测试 ----
+option(SOLAR_BUILD_TESTS "Build unit tests (ctest)" ON)
+if(SOLAR_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif()
+
 # ---- 安装规则 ----
 install(TARGETS solardrive DESTINATION bin)
 install(DIRECTORY web/ DESTINATION share/solardrive/web)
