@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: solardrive
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
@@ -37,10 +37,15 @@ services:
       - objects:/tmp/solardrive/objects
       - logs:/app/logs
     environment:
-      - TZ=Asia/Shanghai
-      - SOLAR_CONFIG=config/config.yaml
-      - PGHOST=postgres
-      - REDIS_HOST=redis
+      TZ: Asia/Shanghai
+      SOLAR_CONFIG: config/config.yaml
+      PGHOST: postgres
+      REDIS_HOST: redis
+      SOLAR_REDIS_HOST: redis
+      SOLAR_JWT_SECRET: ${SOLAR_JWT_SECRET:-dev-only-change-in-production}
+      SOLAR_DB: >-
+        host=postgres port=5432 dbname=solardrive user=postgres
+        password=${POSTGRES_PASSWORD:-postgres}
     depends_on:
       postgres:
         condition: service_healthy

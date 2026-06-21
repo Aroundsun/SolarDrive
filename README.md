@@ -109,7 +109,7 @@ docker compose logs solardrive --tail 30
 curl http://127.0.0.1:8080/api/v1/health
 ```
 
-**访问地址：**
+**访问地址（直连 :8080）：**
 
 | 页面 | URL |
 |------|-----|
@@ -117,6 +117,8 @@ curl http://127.0.0.1:8080/api/v1/health
 | 监控面板 | http://127.0.0.1:8080/metrics.html |
 | Prometheus 原始指标 | http://127.0.0.1:8080/metrics |
 | 健康检查 | http://127.0.0.1:8080/api/v1/health |
+
+> 当前直连 `:8080`；上线 HTTPS 时可再加 Nginx 反代。
 
 **停止服务：**
 
@@ -386,7 +388,7 @@ SolarDrive/
 │   └── config.local.yaml         # 本地开发配置
 ├── deploy/
 │   ├── entrypoint.sh             # Docker 启动脚本
-│   └── nginx.conf                # Nginx 反向代理（可选）
+│   └── env.example               # Compose 环境变量模板
 ├── docs/
 │   └── API.md                    # API 接口文档
 ├── docker-compose.yml
