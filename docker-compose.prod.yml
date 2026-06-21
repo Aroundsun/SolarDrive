@@ -1,0 +1,21 @@
+# 生产环境覆盖层（Nginx 后续再加）
+#
+# 用法：
+#   cp deploy/env.example .env.prod && 填写强密码
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+services:
+  postgres:
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请设置 POSTGRES_PASSWORD}
+
+  redis:
+    ports: !reset []
+
+  solardrive:
+    environment:
+      SOLAR_JWT_SECRET: ${SOLAR_JWT_SECRET:?请设置 SOLAR_JWT_SECRET}
+      SOLAR_DB: >-
+        host=postgres port=5432 dbname=solardrive user=postgres
+        password=${POSTGRES_PASSWORD}
