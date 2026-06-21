@@ -80,17 +80,27 @@ std::optional<std::string> JwtUtil::base64url_decode(const std::string& str) {
     std::string out;
     out.reserve(input.size() / 4 * 3);
     for (size_t i = 0; i < input.size(); i += 4) {
+        if (dec[(unsigned char)input[i]] == 0xFF ||
+            dec[(unsigned char)input[i + 1]] == 0xFF) {
+            return std::nullopt;
+        }
         unsigned char c0 = dec[(unsigned char)input[i]];
         unsigned char c1 = dec[(unsigned char)input[i + 1]];
-        unsigned char c2 = dec[(unsigned char)input[i + 2]];
-        unsigned char c3 = dec[(unsigned char)input[i + 3]];
-        if (c0 == 0xFF || c1 == 0xFF || c2 == 0xFF || c3 == 0xFF)
-            return std::nullopt;
         out += (c0 << 2) | (c1 >> 4);
-        if (input[i + 2] != '=')
+        if (input[i + 2] != '=') {
+            if (dec[(unsigned char)input[i + 2]] == 0xFF) {
+                return std::nullopt;
+            }
+            unsigned char c2 = dec[(unsigned char)input[i + 2]];
             out += ((c1 & 0x0F) << 4) | (c2 >> 2);
-        if (input[i + 3] != '=')
-            out += ((c2 & 0x03) << 6) | c3;
+            if (input[i + 3] != '=') {
+                if (dec[(unsigned char)input[i + 3]] == 0xFF) {
+                    return std::nullopt;
+                }
+                unsigned char c3 = dec[(unsigned char)input[i + 3]];
+                out += ((c2 & 0x03) << 6) | c3;
+            }
+        }
     }
     return out;
 }
@@ -121,12 +131,15 @@ std::string JwtUtil::generate(const JwtClaims& claims, int ttl_hours) {
     payload["iat"]      = claims.iat ? claims.iat : std::time(nullptr);
     payload["exp"]      = claims.exp ? claims.exp : (payload["iat"].get<int64_t>() + ttl_hours * 3600);
 
+    const std::string header_json = header.dump();
+    const std::string payload_json = payload.dump();
+
     std::string header_b64  = base64url_encode(
-        reinterpret_cast<const unsigned char*>(header.dump().data()),
-        header.dump().size());
+        reinterpret_cast<const unsigned char*>(header_json.data()),
+        header_json.size());
     std::string payload_b64 = base64url_encode(
-        reinterpret_cast<const unsigned char*>(payload.dump().data()),
-        payload.dump().size());
+        reinterpret_cast<const unsigned char*>(payload_json.data()),
+        payload_json.size());
 
     // 签名输入 = base64url(header) + "." + base64url(payload)
     std::string signing_input = header_b64 + "." + payload_b64;
