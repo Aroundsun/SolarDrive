@@ -162,12 +162,16 @@ cmake --build build -j$(nproc)
 
 #### 单元测试
 
-网络层 GTest 位于 `test/net_test/`，默认开启（`-DSOLAR_BUILD_TESTS=OFF` 可关闭）：
+网络 / HTTP / 认证 / 存储 / WebSocket 层 GTest 位于 `test/`，默认开启（`-DSOLAR_BUILD_TESTS=OFF` 可关闭）：
 
 ```bash
 cd build && ctest --output-on-failure
-# 或直接运行
+# 或分别运行
 ./test/net_test
+./test/http_test
+./test/auth_test
+./test/storage_test
+./test/ws_test
 ```
 
 #### 配置
@@ -389,7 +393,11 @@ SolarDrive/
 │   ├── metadata/                 # PostgreSQL 连接池 + 文件 DAO
 │   └── api/                      # 上传/下载/认证/断点续传/分享 Handler
 ├── test/
-│   └── net_test/                 # 网络层 GTest（ctest net_test）
+│   ├── net_test/                 # Reactor 网络层
+│   ├── http_test/                # HTTP 解析 / 路由 / 静态文件
+│   ├── auth_test/                # JWT / 鉴权中间件
+│   ├── storage_test/             # 对象存储
+│   └── ws_test/                  # WebSocket 编解码 / 握手
 ├── web/                          # 前端静态资源
 │   ├── index.html                # 云盘 Web UI
 │   ├── metrics.html              # 监控面板
