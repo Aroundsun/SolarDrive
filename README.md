@@ -1,5 +1,7 @@
 # SolarDrive — 自研 Reactor 网络模型的 C++17 云存储服务
 
+[![CI](https://github.com/Aroundsun/SolarDrive/actions/workflows/ci.yml/badge.svg)](https://github.com/Aroundsun/SolarDrive/actions/workflows/ci.yml)
+
 SolarDrive 是一个从网络层到存储层**全链路自研**的个人云盘后端：基于 **Reactor 多线程模型**（Epoll + EventLoop + 线程池）与 **Content-Addressable 对象存储**（SHA-256 寻址、4MB 分块），提供文件上传、下载、秒传去重与断点续传等完整能力。
 
 在安全与运维方面，内置 **JWT 鉴权**、**Redis 缓存**、**YAML 配置**与 **spdlog 结构化日志**；附带 **Web 控制台**与 **Prometheus 监控面板**，并支持 **Docker Compose 一键部署**（PostgreSQL + Redis + 服务本体）。
@@ -162,7 +164,8 @@ cmake --build build -j$(nproc)
 
 #### 单元测试
 
-网络 / HTTP / 认证 / 存储 / WebSocket 层 GTest 位于 `test/`，默认开启（`-DSOLAR_BUILD_TESTS=OFF` 可关闭）：
+网络 / HTTP / 认证 / 存储 / WebSocket 层 GTest 位于 `test/`，默认开启（`-DSOLAR_BUILD_TESTS=OFF` 可关闭）。  
+`main` 分支 push / PR 由 [GitHub Actions CI](https://github.com/Aroundsun/SolarDrive/actions/workflows/ci.yml) 自动执行 `ctest`（当前 **126** 个用例）。
 
 ```bash
 cd build && ctest --output-on-failure
